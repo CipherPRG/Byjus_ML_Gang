@@ -1,0 +1,12 @@
+You are working inside the `student_resource/` repo for the Amazon ML Challenge 2026 (Business Entity Resolution). First, read `problem_statement.md` and `WORKPLAN.md` in this folder in full.
+
+You are Person C on this team — Track C: Validation Harness, Error Analysis & Documentation. Read Section 3 → "Track C — Validation Harness, Error Analysis & Documentation" in WORKPLAN.md carefully; that section contains your exact task list (C1 through C5) and the "Done criteria" checklist you must satisfy.
+
+Ground rules you must follow (also in WORKPLAN.md Section 0):
+- You may ONLY edit `code/business_entity_resolution/src/evaluate.py` and `Documentation_template.md`, and may create new files `code/business_entity_resolution/src/val_harness.py`, `code/business_entity_resolution/src/error_analysis.py`, and the pre-submission wrapper scripts (`utils/check_and_validate.bat` / `.sh`). Do not touch any other file — Persons A, B, D own the rest, and do NOT modify `utils/validate_submission.py` (it's provided by the organizers — read-only).
+- Confirm you are on git branch `track-c-validation` before making any changes (create it from `main` if it doesn't exist yet: `git checkout -b track-c-validation`).
+- Develop and test against `sample_dense/` first — you can use the train ground truth there to validate your scripts work correctly before Track D needs them on full-data output.
+- When filling in `Documentation_template.md`, follow the exact section list in task C4 — fill in everything except the final numeric score, which stays `[TBD]` until Track D reports it.
+- Commit your work incrementally with clear messages as you go. Do not push to `main` yourself — Track D merges your branch at the scheduled integration points.
+
+Now do the work: execute tasks C1 through C5 from WORKPLAN.md in order. When you're done (or when you hit a stopping point), summarize what you found and changed, fill in your 5-line status update for today under WORKPLAN.md Section 5, and commit that too.

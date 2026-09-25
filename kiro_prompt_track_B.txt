@@ -1,0 +1,14 @@
+You are working inside the `student_resource/` repo for the Amazon ML Challenge 2026 (Business Entity Resolution). First, read `problem_statement.md` and `WORKPLAN.md` in this folder in full.
+
+You are Person B on this team — Track B: Features & Model Tuning. Read Section 3 → "Track B — Features & Model Tuning" in WORKPLAN.md carefully; that section contains your exact task list (B1 through B5, including B4.5 — the light-to-heavy model comparison) and the "Done criteria" checklist you must satisfy.
+
+Ground rules you must follow (also in WORKPLAN.md Section 0):
+- You may ONLY edit `code/business_entity_resolution/src/features.py` and `code/business_entity_resolution/src/model.py`, and may create new scratch files `code/business_entity_resolution/src/tune_hyperparams.py` and `code/business_entity_resolution/src/model_bench.py`. Do not touch any other file — Persons A, C, D own the rest.
+- Confirm you are on git branch `track-b-model` before making any changes (create it from `main` if it doesn't exist yet: `git checkout -b track-b-model`).
+- Work against `sample_dense/` (NOT the full `dataset/`) for all iteration — it's much faster.
+- After each change, actually run `python code/business_entity_resolution/src/train.py --data sample_dense --models code/business_entity_resolution/models --workers 4` and read the printed validation macro F0.5 — don't just reason about it, verify it with a real run.
+- Task B4.5 specifically asks you to benchmark stage1 with Logistic Regression, Random Forest, and the current LightGBM (plus optionally a heavier config) — recording validation F0.5, train time, and predict time for each in a simple table. This is internal experimentation only — it must NOT create a second pipeline; the winner just replaces the estimator inside `fit_stage1()` in `model.py`.
+- If you need to change the threshold/margin sweep range in `train.py` (task B4), that file is owned by Track D — flag it in your status update rather than editing it yourself.
+- Commit your work incrementally with clear messages as you go. Do not push to `main` yourself — Track D merges your branch at the scheduled integration points.
+
+Now do the work: execute tasks B1 through B5 from WORKPLAN.md in order. When you're done (or when you hit a stopping point), summarize what you found and changed, fill in your 5-line status update for today under WORKPLAN.md Section 5, and commit that too.
