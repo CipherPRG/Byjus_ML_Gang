@@ -7,7 +7,8 @@ from norm import LEGAL, addr_keys
 
 F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "nlen_d", "nfirst_eq", "ncomp",
       "ar", "asort", "aset", "apart", "ajac", "anum_jac", "anum_eq", "a1_empty", "a2_empty",
-      "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w"]
+      "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w",
+      "ajw", "alev", "alen_d", "ncontain", "akey_jac", "wcount_d"]
 
 
 def _core(n):
@@ -47,7 +48,11 @@ def _chunk(args):
             fuzz.token_set_ratio(a1, a2) if both else 0.0, fuzz.partial_ratio(a1, a2) if both else 0.0,
             _jac(t1, t2), _jac(nu1, nu2), float(bool(nu1 & nu2)), float(e1), float(e2),
             float(bool(k1 & k2)), float(both and a1 == a2), float(f1 is not None and f1 == f2),
-            fuzz.ratio(sk1, sk2), fuzz.token_set_ratio(sk1, sk2), fuzz.partial_ratio(sk1, sk2), float(w))
+            fuzz.ratio(sk1, sk2), fuzz.token_set_ratio(sk1, sk2), fuzz.partial_ratio(sk1, sk2), float(w),
+            JaroWinkler.similarity(a1, a2) if both else 0.0, Levenshtein.normalized_similarity(a1, a2) if both else 0.0,
+            abs(len(a1) - len(a2)) / max(len(a1), len(a2), 1) if both else 0.0,
+            float(len(j1) >= 4 and len(j2) >= 4 and (j1 in j2 or j2 in j1)),
+            _jac(k1, k2), abs(len(c1) - len(c2)) / max(len(c1), len(c2), 1))
     return out
 
 
