@@ -405,13 +405,20 @@ Using Track C's package script:
 
 #### Submission log (Track D maintains this table)
 
-| # | Date/Time (IST) | Code State | Val F0.5 (train split) | LB F0.5 | Notes |
-|---|---|---|---|---|---|
-| 1 | | baseline | | | first real-data run |
-| 2 | | A+B merged | | | |
-| 3 | | A+B+C fixes | | | |
-| 4 | | best config | | | |
-| 5 | | final | | | |
+Fill in every column immediately after each upload. `Val F0.5` = the number printed by `train.py` on `sample_dense/` for that run's models. `LB F0.5` = public leaderboard score from the portal. Never leave a row blank after submitting.
+
+| # | Date/Time (IST) | Branch / commit | Train cmd | Val F0.5 | thr / margin | LB F0.5 | Matched pairs (test) | Notes |
+|---|---|---|---|---|---|---|---|---|
+| 1 | [FILL: e.g. 26 Sep 22:30] | main — baseline (pre-A/B merge) | `train.py --data sample_dense` | [FILL] | [FILL e.g. 0.70 / 0.20] | [FILL after upload] | [FILL from predict.py output] | First full-data run. Sanity check — any score >0 means pipeline ran end-to-end. |
+| 2 | [FILL] | main — post Integration 1 (A+B merged) | `train.py --data sample_dense` | [FILL] | [FILL] | [FILL] | [FILL] | Go/no-go: submit only if Val F0.5 ≥ Sub #1 val F0.5. |
+| 3 | [FILL] | main — post Integration 2 (error-driven fixes) | `train.py --data sample_dense` | [FILL] | [FILL] | [FILL] | [FILL] | Go/no-go: submit only if Val F0.5 ≥ Sub #2 val F0.5. |
+| 4 | [FILL] | main — final freeze (Day 3) | `train.py --data sample_dense` OR `train.py --final --thr X --margin Y` | [FILL] | [FILL] | [FILL] | [FILL] | Final intended submission. If --final mode used, note val F0.5 is from the pre-final normal run. |
+| 5 | [FILL — use only if #4 regressed or format issue] | main — emergency fix | [FILL] | [FILL] | [FILL] | [FILL] | [FILL] | RESERVE SLOT. Do not use speculatively. Only if #4 had a clear verifiable regression or format failure. |
+
+**Go/No-Go checklist before EVERY upload (all three must be true):**
+- [ ] `utils/validate_submission.py` printed `PASS`
+- [ ] Val F0.5 (train split) ≥ previous submission's val F0.5  (or this is submission #1)
+- [ ] `val_harness.py` shows no catastrophic per-country drop (>0.05 drop in any single country vs previous run)
 
 #### Done criteria for Track D
 - [ ] At least 1 leaderboard submission made by end of Day 1 or early Day 2.
@@ -419,6 +426,12 @@ Using Track C's package script:
 - [ ] At least 3 leaderboard submissions made by end of Day 2.
 - [ ] Final submission (best known config) uploaded by Day 3 ~16:00 IST.
 - [ ] Submission package zip assembled and ready by Day 3 ~18:00 IST.
+
+#### Code changes completed (Day 2)
+- [x] `train.py` — finer thr/margin sweep + `--final` mode + `--thr`/`--margin` override
+- [x] `predict.py` — `--batch` flag, RAM warning, France verification, progress ticker, post-run summary
+- [x] `utils/build_package.bat` + `utils/build_package.sh` — submission package assembly with validation gate
+- [x] `WORKPLAN.md` — submission log table expanded with per-column instructions and Go/No-Go checklist
 
 ---
 
@@ -533,11 +546,11 @@ Each person writes exactly 5 bullet lines: `DONE`, `DONE`, `DONE`, `BLOCKED` (or
 - [ ] NEXT:
 
 **Person D (Integration Lead)**
-- [ ] DONE:
-- [ ] DONE:
-- [ ] DONE:
-- [ ] BLOCKED/DONE:
-- [ ] NEXT:
+- [x] DONE: Rewrote `train.py` — finer thr/margin sweep (384 combos vs old 76: thr 0.45–0.92 step 0.02, margin 0.00–0.32 step 0.02); added `--final` flag for full-data retraining with no holdout; added `--thr`/`--margin` override to skip sweep on quick re-trains. Fully backward compatible.
+- [x] DONE: Rewrote `predict.py` — `--batch` flag (default 2 M, reduce to 500 K if OOM); RAM warning via psutil before inference starts; France verification block prints clear warning if country missing or produces 0 matches; per-batch progress ticker for large countries; post-run summary table (total S1, matched, empty).
+- [x] DONE: Created `utils/build_package.bat` and `utils/build_package.sh` — both verify source files exist, build `submission_package/` directory, copy output + code + docs, run `validate_submission.py` against copied files, zip into `<team_name>_submission.zip`. Exits on any error, no silent failures.
+- [x] DONE: Expanded submission log table in WORKPLAN.md with per-column fill instructions, Go/No-Go checklist, and notes on when to use slot #5.
+- [ ] NEXT: Run Task 1 — first full-data baseline pipeline run (`train.py` on `sample_dense/`, then `predict.py` on `dataset/test/`); fill in submission log row #1; get Submission #1 onto the leaderboard.
 
 ---
 
