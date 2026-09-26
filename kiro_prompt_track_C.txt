@@ -10,3 +10,77 @@ Ground rules you must follow (also in WORKPLAN.md Section 0):
 - Commit your work incrementally with clear messages as you go. Do not push to `main` yourself — Track D merges your branch at the scheduled integration points.
 
 Now do the work: execute tasks C1 through C5 from WORKPLAN.md in order. When you're done (or when you hit a stopping point), summarize what you found and changed, fill in your 5-line status update for today under WORKPLAN.md Section 5, and commit that too.
+
+---
+## TRACK C PROGRESS LOG (Kiro, 26 Sep 2026)
+
+### STATUS: ALL TASKS COMPLETE ✓
+
+Branch: `track-c-validation`
+
+### C1 — val_harness.py ✓ DONE
+File: `code/business_entity_resolution/src/val_harness.py`
+- Per-country macro F0.5 breakdown (US, India, any country)
+- Overall TP / FP / FN aggregate counts
+- Top-N worst-performing S1 entities (configurable, default 20), with predicted vs true sets
+- Singleton analysis (correctly left empty vs incorrectly matched)
+- --val-only flag: restricts to 30% hash-based val split (crc32 mod 10 < 3), same split as train.py
+- GO/NO-GO summary at the end (F0.5 >= 0.95 = GO, < 0.85 = NO-GO)
+Usage:
+  python code/business_entity_resolution/src/val_harness.py \
+      --gt dataset/train/train_ground_truth.tsv \
+      --pred output/matching_results.tsv \
+      --s1 dataset/train/train_source1.tsv [--val-only] [--top 20]
+
+### C2 — error_analysis.py ✓ DONE
+File: `code/business_entity_resolution/src/error_analysis.py`
+Error categories: name_collision, address_collision, near_dup, script_mismatch, singleton_fp, other
+- Uses rapidfuzz token_set_ratio if available, falls back to token Jaccard
+- Thresholds: NAME_SIM_HI=0.80, ADDR_SIM_HI=0.70
+- --val-only flag (same hash split)
+- Actionable advice per dominant FP/FN pattern printed at end
+Usage:
+  python code/business_entity_resolution/src/error_analysis.py \
+      --gt dataset/train/train_ground_truth.tsv \
+      --pred output/matching_results.tsv \
+      --src1 dataset/train/train_source1.tsv \
+      --src2 dataset/train/train_source2.tsv \
+      --src3 dataset/train/train_source3.tsv [--n 50] [--show 20] [--val-only]
+
+### C3 — Pre-submission wrappers ✓ DONE
+Files: `utils/check_and_validate.bat`, `utils/check_and_validate.sh`
+- Step 1: runs validate_submission.py (exit != 0 → NO-GO, do not submit)
+- Step 2: runs val_harness.py --val-only for F0.5 breakdown
+- Prints final GO / NO-GO verdict
+Usage:
+  utils\check_and_validate.bat <matching_tsv> <candidate_tsv> <test_dir> <gt_tsv> <s1_train_tsv>
+  bash utils/check_and_validate.sh   <matching_tsv> <candidate_tsv> <test_dir> <gt_tsv> <s1_train_tsv>
+
+### C4 — Documentation_template.md ✓ DONE
+All methodology sections filled:
+- Section 1: Executive Summary (val F0.5=0.9681, blocking recall=0.9545)
+- Section 2.1: Problem Analysis (6 noise patterns documented)
+- Section 2.2: Solution Strategy (blocking + two-stage LightGBM, decode rule)
+- Section 3: Candidate Generation (all 11 key types A/N/X/V/R/P/Q/T/U/K/S with weights)
+- Section 4: Matching Model (all 32 features in table, both stages documented, model comparison table)
+- Section 5: Results table (baseline 0.9054 → final 0.9681 progression), error categories as [TBD] pending Track D run
+- Section 6: Conclusion
+- Appendix A: Full code structure + reproduction steps
+- Appendix B: Blocking parameter sensitivity + per-country threshold experiment results
+Remaining [TBD]: Section 5.2 error category counts (needs Track D full-data run) + public LB score
+
+### C5 — Submission package scripts ✓ DONE
+Files: `build_package.bat`, `build_package.sh` (at repo root)
+- Creates submission_package/ with correct structure:
+    submission_package/output/ + code/business_entity_resolution/src/ + Documentation_template.md
+- Warns if output files missing (placeholder files inserted so Track D can easily swap in finals)
+- Prints zip command at end
+Usage:
+  build_package.bat [output_dir] [models_dir]
+  bash build_package.sh [output_dir] [models_dir]
+
+### REMAINING FOR TRACK D
+- Run val_harness.py and error_analysis.py after each full-data prediction
+- Fill in Section 5.2 [TBD] error category counts from error_analysis.py output
+- Update Section 5.1 public LB score after each leaderboard submission
+- Run build_package.bat/sh + zip after final run (Day 3 ~14:00 IST)

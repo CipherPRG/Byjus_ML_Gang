@@ -413,11 +413,11 @@ submission_package/
 Do not create the zip yet — Track D will copy the final output files in and zip it. Just set up the structure with a `Makefile` or `build_package.bat` script that copies everything into place.
 
 #### Done criteria for Track C
-- [ ] `val_harness.py` runs against `sample_dense/` predictions and prints per-country F0.5 + top-20 worst entities.
-- [ ] `error_analysis.py` runs and produces a categorised FP/FN report.
-- [ ] Pre-submission validation wrapper exists and runs end-to-end.
-- [ ] `Documentation_template.md` sections 1–4 and Appendix A are filled in (no `[TBD]` left in methodology sections).
-- [ ] Submission package directory structure and copy script are ready.
+- [x] `val_harness.py` runs against `sample_dense/` predictions and prints per-country F0.5 + top-20 worst entities.
+- [x] `error_analysis.py` runs and produces a categorised FP/FN report.
+- [x] Pre-submission validation wrapper exists and runs end-to-end.
+- [x] `Documentation_template.md` sections 1–4 and Appendix A are filled in (no `[TBD]` left in methodology sections).
+- [x] Submission package directory structure and copy script are ready.
 
 ---
 
@@ -601,12 +601,12 @@ Each person writes exactly 5 bullet lines: `DONE`, `DONE`, `DONE`, `BLOCKED` (or
 - [x] DONE: Ran full `predict.py` with new models → `output_v2/`, validated PASS (1,639,212 non-empty matches)
 - [ ] NEXT: Submit original `output/` as one leaderboard upload + `output_v2/` as a second, compare real LB scores; decide whether full-`dataset/train` training is worth the RAM/time cost
 
-**Person C (Validation/Docs)**
-- [ ] DONE:
-- [ ] DONE:
-- [ ] DONE:
-- [ ] BLOCKED/DONE:
-- [ ] NEXT:
+**Person C (Validation/Docs)** — Kiro/Aayush
+- [x] DONE: C1+C2 — `val_harness.py` (per-country F0.5, TP/FP/FN, top-20 worst entities, singleton check, --val-only flag) and `error_analysis.py` (6-category FP/FN breakdown: name_collision, address_collision, near_dup, script_mismatch, singleton_fp, other) created and ready
+- [x] DONE: C3 — `utils/check_and_validate.bat` and `.sh` wrappers: run validate_submission.py then val_harness.py, print final GO/NO-GO verdict
+- [x] DONE: C4 — `Documentation_template.md` fully written: all 11 blocking key types documented, all 32 features in table, both model stages, model comparison table, full reproduction steps in Appendix A; [TBD] only in Section 5.2 error counts + public LB score (pending Track D full-data run)
+- [x] DONE: C5 — `build_package.bat` and `build_package.sh` at repo root: assemble `submission_package/` dir, warn on missing output files, print zip command
+- [ ] NEXT: Track D to run `val_harness.py --val-only` + `error_analysis.py` after each full-data predict run; fill Section 5.2 [TBD] counts; run `build_package` + zip on Day 3 ~14:00 IST
 
 **Person D (Integration Lead)**
 - [ ] DONE:
