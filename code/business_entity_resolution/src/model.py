@@ -4,7 +4,8 @@ import pandas as pd
 import lightgbm as lgb
 from features import F1
 
-RAW2 = ["nsort", "aset", "ajac", "akey_eq", "a_exact", "anum_first_eq", "w", "ncore_eq", "sk_r", "sk_set"]
+RAW2 = ["nsort", "aset", "ajac", "akey_eq", "a_exact", "anum_first_eq", "w", "ncore_eq", "sk_r", "sk_set",
+        "hnum_edit"]
 P1 = dict(n_estimators=500, learning_rate=0.05, num_leaves=63, subsample=0.8, subsample_freq=1,
           colsample_bytree=0.8, min_child_samples=20, reg_lambda=1.0, is_unbalance=True,
           metric="auc", verbose=-1)

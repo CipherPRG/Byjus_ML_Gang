@@ -8,9 +8,9 @@ from norm import norm_name, norm_addr, addr_keys, ADDR_STOP, skel
 WEIGHT = {"A": 3, "R": 2, "N": 3, "Q": 2, "P": 2, "T": 1, "U": 1, "S": 1, "K": 1, "V": 2, "X": 3}
 
 
-def keys_for(country, core, atoks):
+def keys_for(country, core, atoks, stop=frozenset()):
     ks = []
-    for k in addr_keys(atoks):
+    for k in addr_keys(atoks, stop=stop):
         ks.append("A|" + country + "|" + k)
     if core:
         ks.append("N|" + country + "|" + " ".join(sorted(core)))
@@ -35,12 +35,12 @@ def keys_for(country, core, atoks):
     lt = sorted({t for t in core if len(t) >= 5 and t.isalpha()}, key=lambda t: (-len(t), t))[:1]
     nk += ["t" + t[:4] for t in lt]
     ak = ["d" + t for t in [t for t in atoks if any(ch.isdigit() for ch in t) and len(t) <= 8][:2]]
-    ak += ["w" + t for t in sorted({t for t in atoks if len(t) >= 5 and t.isalpha() and t not in ADDR_STOP},
-                                   key=lambda t: (-len(t), t))[:2]]
+    ak += ["w" + t for t in sorted({t for t in atoks if len(t) >= 5 and t.isalpha() and t not in ADDR_STOP
+                                    and t not in stop}, key=lambda t: (-len(t), t))[:2]]
     for a_ in nk[:4]:
         for b_ in ak[:4]:
             ks.append("X|" + country + "|" + a_ + "|" + b_)
-    al = sorted({t for t in atoks if len(t) >= 5 and t.isalpha() and t not in ADDR_STOP},
+    al = sorted({t for t in atoks if len(t) >= 5 and t.isalpha() and t not in ADDR_STOP and t not in stop},
                 key=lambda t: (-len(t), t))[:2]
     if len(al) == 2:
         ks.append("R|" + country + "|" + "|".join(sorted(al)))
@@ -57,7 +57,8 @@ def h64(k):
 class Side:
     """Normalised records of one source (one country): ids, clean name/address, blocking keys."""
 
-    def __init__(self, df):
+    def __init__(self, df, stop=frozenset()):
+        self.stop = stop  # per-country generic address words (norm.generic_addr_tokens); empty = off
         self.ids = df.entity_id.tolist()
         self.nclean, self.aclean, self.nskel = [], [], []
         key, row, w = [], [], []
@@ -67,7 +68,7 @@ class Side:
             self.nclean.append(nc)
             self.nskel.append(" ".join(x for x in (skel(t) for t in core) if x))
             self.aclean.append(ac)
-            for k in keys_for(c, core, at):
+            for k in keys_for(c, core, at, stop):
                 key.append(h64(k)); row.append(i); w.append(WEIGHT[k[0]])
         self.key = np.array(key, dtype=np.int64)
         self.krow = np.array(row, dtype=np.int32)
@@ -79,6 +80,7 @@ class Side:
     @staticmethod
     def concat(sides):
         out = Side.__new__(Side)
+        out.stop = sides[0].stop if sides else frozenset()
         out.ids, out.nclean, out.aclean, out.nskel = [], [], [], []
         keys, rows, ws = [], [], []
         off = 0

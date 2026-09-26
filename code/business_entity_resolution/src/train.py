@@ -32,7 +32,13 @@ def main():
                     help="fixed threshold (required with --final, optional otherwise to skip sweep)")
     ap.add_argument("--margin",  type=float, default=None,
                     help="fixed margin  (required with --final, optional otherwise to skip sweep)")
+    ap.add_argument("--addr-stop-frac", type=float, default=None,
+                    help="skip address words present in more than this fraction of a country's addresses "
+                         "when building address keys (e.g. 0.01). Saved into config.json so predict matches.")
     a = ap.parse_args()
+    if a.addr_stop_frac is not None:
+        CFG["addr_stop_frac"] = a.addr_stop_frac
+    print(f"CFG = {CFG}")
 
     if a.final and (a.thr is None or a.margin is None):
         ap.error("--final requires --thr and --margin (copy the best values from a normal-mode run's config.json)")

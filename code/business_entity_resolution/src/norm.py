@@ -2,11 +2,23 @@
 import re, unicodedata
 
 LEGAL = {"llc","inc","ltd","limited","private","pvt","corp","corporation","co","company",
-         "llp","pc","plc","lp","the","and","of","pllc","incorporated","opc","ll","p","l"}
+         "llp","pc","plc","lp","the","and","of","pllc","incorporated","opc","ll","p","l",
+         # French legal-entity suffixes (test set adds France, unseen at training time;
+         # without these "sarl"/"sas"/etc. were treated as real name content, corrupting
+         # both blocking keys and every name-similarity feature for every France pair)
+         "sarl","sas","sasu","eurl","sa","sci","snc","scop","scea","sca","gie","eirl",
+         "selarl","selas","selasu","groupement",
+         # a handful of other common international suffixes, defensively, since the
+         # problem statement says country is an open set and must not be hard-coded
+         "gmbh","ag","kg","ohg","mbh","srl","sl","spa","bv","nv","oy","ab","as","kft"}
 ABBR = {"dr":"drive","rd":"road","st":"street","ave":"avenue","av":"avenue","blvd":"boulevard",
         "ln":"lane","ct":"court","hwy":"highway","pkwy":"parkway","cir":"circle","pl":"place",
         "ter":"terrace","trl":"trail","sq":"square","mt":"mount","ft":"fort","n":"north",
-        "s":"south","e":"east","w":"west","nr":"near","opp":"opposite","cross":"cross"}
+        "s":"south","e":"east","w":"west","nr":"near","opp":"opposite","cross":"cross",
+        # French street-type abbreviations, so "R." / "Bd" / "Che" line up with the
+        # unabbreviated "rue"/"boulevard"/"chemin" spelled out on the other source
+        "r":"rue","bd":"boulevard","che":"chemin","chem":"chemin","all":"allee",
+        "imp":"impasse","fg":"faubourg","pas":"passage","res":"residence"}
 ADDR_STOP = {"unit","apartment","apt","floor","fl","suite","ste","near","opposite","no","nd","th",
              "rd","st","po","box","block","building","bldg","room","flat","plot","house","shop",
              "hno","sno","the","and"}
@@ -120,15 +132,36 @@ def norm_addr(s: str):
     return " ".join(out), out
 
 
-def addr_keys(toks, max_keys=3):
-    """(number, following street word) keys, e.g. ('41','groton')."""
+def addr_keys(toks, max_keys=3, stop=frozenset()):
+    """(number, following street word) keys, e.g. ('41','groton').
+    `stop`: extra generic words to skip (see generic_addr_tokens). Without it, a French address
+    '34 Rue Frederic Bastiat' gives the useless key ('34','rue') shared by every '34 Rue ...'."""
     keys = []
+    look = 6 if stop else 4  # skipping generic words needs a slightly longer lookahead
     for i, t in enumerate(toks):
         if any(c.isdigit() for c in t) and len(t) <= 8:
-            for j in range(i + 1, min(i + 4, len(toks))):
+            for j in range(i + 1, min(i + look, len(toks))):
                 w = toks[j]
-                if w.isalpha() and len(w) > 2 and w not in ADDR_STOP:
+                if w.isalpha() and len(w) > 2 and w not in ADDR_STOP and w not in stop:
                     keys.append(t + "|" + w); break
             if len(keys) >= max_keys:
                 break
     return keys
+
+
+def generic_addr_tokens(addresses, frac=0.01, max_n=200_000, seed=0):
+    """Data-driven generic address words for ONE country: alphabetic tokens present in more than
+    `frac` of that country's addresses (street types, articles, city/state names: 'street',
+    'sector', 'rue', 'de', ...). Learned from the data itself, so it works for any country label,
+    including ones never seen in training (France), without hard-coding any language."""
+    import random
+    addrs = list(addresses)
+    if len(addrs) > max_n:
+        addrs = random.Random(seed).sample(addrs, max_n)
+    cnt = {}
+    for a in addrs:
+        for t in set(norm_addr(a)[1]):
+            if t.isalpha():
+                cnt[t] = cnt.get(t, 0) + 1
+    n = max(len(addrs), 1)
+    return frozenset(t for t, c in cnt.items() if c / n > frac)
