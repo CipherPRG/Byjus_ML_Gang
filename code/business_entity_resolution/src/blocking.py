@@ -89,7 +89,7 @@ class Side:
         return out
 
 
-def candidates(s1, oth, max_block=30, max_s1_block=200, topk=25, batch=50_000):
+def candidates(s1, oth, max_block=60, max_s1_block=200, topk=60, batch=50_000):
     """Return DataFrame(r1, ro, w): candidate pairs (row indices) and the summed weight of shared keys."""
     k2 = pd.DataFrame({"key": oth.key, "ro": oth.krow, "w": oth.kw})
     k2 = k2[k2.groupby("key").key.transform("size") <= max_block]
