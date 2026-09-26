@@ -6,7 +6,7 @@ from rapidfuzz.distance import JaroWinkler, Levenshtein
 from norm import LEGAL, addr_keys
 
 F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "nlen_d", "nfirst_eq", "ncomp",
-      "ar", "asort", "aset", "apart", "ajac", "anum_jac", "anum_eq", "a1_empty", "a2_empty",
+      "ar", "asort", "aset", "apart", "ajac", "anum_jac", "anum_eq", "a2_empty",
       "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w",
       "ajw", "alev", "alen_d", "ncontain", "akey_jac", "wcount_d"]
 
@@ -46,7 +46,7 @@ def _chunk(args):
             float(bool(c1) and bool(c2) and c1[0] == c2[0]), fuzz.token_set_ratio(j1, j2),
             fuzz.ratio(a1, a2) if both else 0.0, fuzz.token_sort_ratio(a1, a2) if both else 0.0,
             fuzz.token_set_ratio(a1, a2) if both else 0.0, fuzz.partial_ratio(a1, a2) if both else 0.0,
-            _jac(t1, t2), _jac(nu1, nu2), float(bool(nu1 & nu2)), float(e1), float(e2),
+            _jac(t1, t2), _jac(nu1, nu2), float(bool(nu1 & nu2)), float(e2),
             float(bool(k1 & k2)), float(both and a1 == a2), float(f1 is not None and f1 == f2),
             fuzz.ratio(sk1, sk2), fuzz.token_set_ratio(sk1, sk2), fuzz.partial_ratio(sk1, sk2), float(w),
             JaroWinkler.similarity(a1, a2) if both else 0.0, Levenshtein.normalized_similarity(a1, a2) if both else 0.0,

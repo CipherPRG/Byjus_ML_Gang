@@ -14,7 +14,7 @@ import pandas as pd
 from io_utils import read_tsv, countries_of
 from pipeline import build_country
 from features import pair_features, F1
-from model import fit_stage1, fit_stage2, stage2_matrix, decode, raw2
+from model import fit_stage1, fit_stage2, stage2_matrix, decode, decode_prep, decode_apply, raw2
 from evaluate import f05_macro
 
 CFG = dict(max_block=30, max_s1_block=200, topk=30)
@@ -104,7 +104,7 @@ def main():
             fit  = tr & (fold != f)
             pred = tr & (fold == f)
             p1[pred] = fit_stage1(X[fit], Y[fit]).predict_proba(X[pred])[:, 1]
-        m1 = fit_stage1(X[tr], Y[tr])
+        m1 = fit_stage1(X[tr], Y[tr], eval_set=(X[is_val], Y[is_val]))
         p1[is_val] = m1.predict_proba(X[is_val])[:, 1]
 
     # ------------------------------------------------------------------ stage 2
@@ -112,7 +112,7 @@ def main():
     if a.final:
         m2 = fit_stage2(X2, Y)
     else:
-        m2 = fit_stage2(X2[tr], Y[tr])
+        m2 = fit_stage2(X2[tr], Y[tr], eval_set=(X2[is_val], Y[is_val]))
     p2 = m2.predict_proba(X2)[:, 1]
 
     # ------------------------------------------------------------------ threshold / margin sweep
@@ -127,23 +127,29 @@ def main():
         print(f"fixed thr/margin supplied: thr={best[1]:.2f} margin={best[2]:.2f} (sweep skipped)")
 
     else:
-        # ---- Fine-grained sweep (Task 2 improvement over the old coarse grid) ----
-        # Old grid:  thr np.arange(0.30, 0.96, 0.05)  x  margin (0.0, 0.05, 0.1, 0.2)   → 76 combos
-        # New grid:  thr np.arange(0.45, 0.92, 0.02)  x  margin np.arange(0.00, 0.32, 0.02) → 24x16=384 combos
-        # Narrowing the thr range to 0.45–0.92 is safe: the baseline optimum was 0.65–0.70,
-        # and values below 0.45 / above 0.92 consistently produced worse F0.5 in all prior runs.
+        # ---- Fine-grained sweep ----
+        # WIDENED again (26 Sep, post is_unbalance=True): a prior run with is_unbalance=True hit
+        # thr=0.91 margin=0.30, right at the old grid's edge (thr 0.45-0.92, margin 0.00-0.32) -
+        # that's a sign the true optimum is outside the tested range, not that 0.91/0.30 is it.
+        # is_unbalance reweights the loss and pushes predicted probabilities more extreme, which
+        # shifts where the best thr/margin sits - so widen until the winner stops landing on an edge.
         val_ids = {k for k in truth if zlib.crc32((k + "v").encode()) % 10 < 3}
         vt      = {k: v for k, v in truth.items() if k in val_ids}
         best    = (-1.0, 0.5, 0.0)
 
-        thr_grid    = np.arange(0.45, 0.92, 0.02)
-        margin_grid = np.arange(0.00, 0.32, 0.02)
+        thr_grid    = np.arange(0.30, 0.99, 0.02)
+        margin_grid = np.arange(0.00, 0.45, 0.02)
         print(f"sweeping {len(thr_grid)} thresholds x {len(margin_grid)} margins "
               f"= {len(thr_grid)*len(margin_grid)} combos …")
 
+        # decode_prep does the expensive sort/groupby ONCE (thr/margin don't affect it);
+        # decode_apply per combo is then just a cheap boolean filter. The old code called
+        # decode() (full re-sort) 384 times - this is the same result, much faster.
+        prepped = decode_prep(r1, ro, p2)
+
         for thr in thr_grid:
             for mg in margin_grid:
-                rr, oo = decode(r1, ro, p2, thr, mg)
+                rr, oo = decode_apply(prepped, thr, mg)
                 pred = {}
                 for i, o in zip(rr, oo):
                     s = u1[i]
