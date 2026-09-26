@@ -215,16 +215,36 @@ This is internal experimentation inside Track B on `sample_dense/` — it does N
 - **Heavier (only if time allows):** `LightGBM` with higher `num_estimators`/`num_leaves` from B3's grid, or `xgboost.XGBClassifier` if installed — both MIT/Apache-2.0, well under 8B params, so both are contest-legal.
 Report a simple table (model, val F0.5, train time, predict time) in the Day 2 status update. Keep whichever model wins on F0.5 first, runtime second — do not swap the production model without Track D's sign-off, since it affects the full-data run's timing budget.
 
+**B3/B4/B4.5 — Result (Pratham, 26 Sep ~15:45 IST):**
+Pushed to `pathu` branch (commits `c9b7817`, `bb36851`):
+- Hyperparameters: added `is_unbalance=True`, `min_child_samples=20`, `reg_lambda=1.0` to P1/P2; added optional early stopping (50 rounds, AUC) via an `eval_set` param on `fit_stage1`/`fit_stage2`.
+- Fixed a real perf bug in the threshold/margin sweep (`decode()` was re-sorting the full dataframe on every combo) by splitting it into `decode_prep()`/`decode_apply()` — identical results, much faster sweeps.
+- Widened the sweep grid (thr 0.30–0.98, margin 0.00–0.44) after the previous optimum landed at its edge; confirmed new interior optimum at **thr=0.94, margin=0.34**.
+- Validation macro F0.5: **0.9666 → 0.9674** (B2 baseline → after this round of tuning).
+- B4.5 model comparison (`src/model_bench.py`, same OOF + stage2 + decode pipeline for every candidate):
+
+  | model | val F0.5 |
+  |---|---|
+  | current (LightGBM, production config) | **0.9674** |
+  | rf200 (RandomForestClassifier) | 0.9643 |
+  | logreg (LogisticRegression) | 0.9570 |
+
+  (`lgb_700_127` was already tried standalone earlier and reverted — no improvement, so not re-run.) Decision: keep current LightGBM stage1 config, no production model swap.
+- Feature importance check (`src/check_feature_importance.py` for stage1, `src/check_stage2_importance.py` for stage2): stage1 dominated by `aset` (70% of gain); stage2 dominated by `p1` (92%, expected — stage2 refines stage1's own score using competitive context). Two near-zero features found: `a1_empty` (exactly 0.0, confirmed unused anywhere else) was removed from `features.py`, re-verified F0.5 unchanged (0.9674). `a_exact` (0.00% in stage1, 0.00% in stage2 but non-zero) was kept since it's still occasionally used and not provably dead.
+- Also ran a fixed/fast version of the adithya-sundar branch's blocking audit against ground truth (commit `a79c68e`): overall blocking recall = **0.9545** (India 0.9284, US 0.9720) — this is Track B/Track A's shared ceiling info, useful for Track C/D's documentation.
+
+Branch is merge-ready for Track D.
+
 **B5 — Hand off clean diff to Track D (Day 2 EOD)**
 Commit `features.py` and `model.py` (and any new scratch files like `tune_hyperparams.py`) to `track-b-model` with a summary: "validation F0.5 on sample_dense: before X.XXXX → after X.XXXX; new features: [...]; best hyperparams: [...]".
 
 #### Done criteria for Track B
-- [ ] Baseline F0.5 on `sample_dense/` measured and recorded.
-- [ ] At least 2 new features added, validated to improve F0.5 on `sample_dense/`.
-- [ ] LightGBM feature importance checked; no-contribution features removed or flagged.
-- [ ] Hyperparameter tuning done; best `P1`/`P2` dicts updated in `model.py`.
-- [ ] Light-to-heavy stage1 model comparison run (B4.5), results table recorded, decision on which model to keep documented.
-- [ ] Branch is cleanly merge-ready for Track D by Day 2 ~20:00 IST.
+- [x] Baseline F0.5 on `sample_dense/` measured and recorded.
+- [x] At least 2 new features added, validated to improve F0.5 on `sample_dense/`.
+- [x] LightGBM feature importance checked; no-contribution features removed or flagged.
+- [x] Hyperparameter tuning done; best `P1`/`P2` dicts updated in `model.py`.
+- [x] Light-to-heavy stage1 model comparison run (B4.5), results table recorded, decision on which model to keep documented.
+- [x] Branch is cleanly merge-ready for Track D by Day 2 ~20:00 IST.
 
 ---
 
