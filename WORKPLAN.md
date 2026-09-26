@@ -195,6 +195,29 @@ All additions go in `_chunk()`. The `F1` list at the top must be updated to matc
 
 After adding features, update `F1` list, re-run `train.py` on `sample_dense/`, check that F0.5 improves. Use LightGBM feature importances (available via `m1.booster_.feature_importance()`) to prune features that score near zero.
 
+**B2 — Result (Pratham, 26 Sep ~05:40 IST):**
+Added 6 new features to `features.py` (pushed to `pathu` branch, commit `3d2e58e`):
+- `ajw`, `alev` — address JaroWinkler/Levenshtein similarity (name already had these via `njw`/`nlev`; address had none)
+- `alen_d` — address length difference, normalised (name had `nlen_d`; address had none)
+- `ncontain` — substring containment flag between core name strings (catches branding noise, e.g. `"Crestline Crestline Clean LP"` vs `"Crestline Clean"`)
+- `akey_jac` — jaccard overlap of address blocking-keys, replacing the old boolean `akey_eq`
+- `wcount_d` — name core-token count difference
+
+`F1` grew from 27 → 33 features, all appended at the end (safe — `model.py`'s `RAW2` indexes by name via `F1.index(c)`, not position).
+
+Ran `train.py --data sample_dense --models ../models --workers 4`:
+- Blocking recall: India 0.9284, US 0.9720, overall 0.9545 — **identical** to the pre-change baseline (expected: features.py doesn't touch blocking.py, so this just confirms no regression)
+- Validation macro F0.5: **0.9653 → 0.9666** at thr=0.70, margin=0.20 (val S1: 32,931) — small but real improvement, no regression anywhere
+
+Then ran full-dataset `predict.py` with these new models → `output_v2/`:
+- `matching_results.tsv`: 1,732,544 rows, 93,332 empty / **1,639,212 non-empty** (vs original submission's 1,642,130 non-empty — ~2,900 fewer, consistent with the new margin being stricter, likely trading a few borderline matches for precision)
+- `utils/validate_submission.py` → **PASS**, safe to submit
+
+**Thinking about next:**
+- Plan is to submit the original (`output/`) as one leaderboard upload and this new one (`output_v2/`) as a second, back-to-back, to get a real leaderboard-score comparison rather than trusting internal val F0.5 alone (leaderboard scores against real held-out ground truth, which could behave differently)
+- Have **not** yet trained on the full `dataset/train` (only ever `sample_dense/`) — considering whether it's worth the RAM/time cost (full-dataset training would need ~27GB+ RAM based on the `predict.py` full-test-set experience; laptop can do it, Colab free tier can't). Kaggle Notebooks (~29-30GB RAM, free) is the fallback if the laptop is tied up
+- Given the gain from B2's features was modest (+0.0013 F0.5), still open to more feature ideas (numeric-span jaccard, TF-IDF cosine per B2's original suggestion list) if there's time left after the leaderboard comparison lands
+
 **B3 — Tune stage1 and stage2 hyperparameters (Day 2)**
 The dicts `P1` and `P2` in `model.py` use fixed learning rates and tree counts. Try a small grid search directly in a scratch script `src/tune_hyperparams.py` (new file) using the held-out validation split that `train.py` already constructs:
 - `n_estimators`: [200, 300, 500] for stage1
@@ -493,12 +516,12 @@ Each person writes exactly 5 bullet lines: `DONE`, `DONE`, `DONE`, `BLOCKED` (or
 - [ ] BLOCKED/DONE:
 - [ ] NEXT:
 
-**Person B (Features/Model)**
-- [ ] DONE:
-- [ ] DONE:
-- [ ] DONE:
-- [ ] BLOCKED/DONE:
-- [ ] NEXT:
+**Person B (Features/Model)** — Pratham
+- [x] DONE: Added 6 new features to `features.py` (ajw, alev, alen_d, ncontain, akey_jac, wcount_d) — see B2 result above for full detail
+- [x] DONE: Verified no regression — blocking recall identical (India 0.9284/US 0.9720), val F0.5 improved 0.9653 → 0.9666
+- [x] DONE: Fixed a stale `blocking.py`/`norm.py` mismatch on the `pathu` branch's Colab clone (branch itself was already correct — false alarm, but worth noting since it cost time)
+- [x] DONE: Ran full `predict.py` with new models → `output_v2/`, validated PASS (1,639,212 non-empty matches)
+- [ ] NEXT: Submit original `output/` as one leaderboard upload + `output_v2/` as a second, compare real LB scores; decide whether full-`dataset/train` training is worth the RAM/time cost
 
 **Person C (Validation/Docs)**
 - [ ] DONE:
