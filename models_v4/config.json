@@ -1,0 +1,11 @@
+{
+  "cfg": {
+    "max_block": 60,
+    "max_s1_block": 200,
+    "topk": 60
+  },
+  "thr": 0.9600000000000006,
+  "margin": 0.2,
+  "val_f05": 0.9681213881880024,
+  "final_mode": false
+}

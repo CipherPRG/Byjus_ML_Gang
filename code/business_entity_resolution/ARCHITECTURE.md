@@ -126,18 +126,31 @@ final run-summary block.
 
 ## 4. Model artifacts on disk (as of this session)
 
-| dir | features trained on | thr / margin | val F0.5 | status |
-|---|---|---|---|---|
-| `models/` | 33 (pre-`bb36851`) | 0.70 / 0.20 | 0.9667 | **stale** |
-| `models_tuned/` | 33 (pre-`bb36851`) | 0.70 / 0.20 | 0.9668 | **stale** |
-| `models_v3/` | 32 (current) | 0.94 / 0.34 | 0.9674 | **current** — use this |
+| dir | features trained on | blocking cfg | thr / margin | val F0.5 | status |
+|---|---|---|---|---|---|
+| `models/` | 33 (pre-`bb36851`) | max_block=30/topk=30 | 0.70 / 0.20 | 0.9667 | **stale** |
+| `models_tuned/` | 33 (pre-`bb36851`) | max_block=30/topk=30 | 0.70 / 0.20 | 0.9668 | **stale** |
+| `models_v3/` | 32 (current) | max_block=30/topk=30 | 0.94 / 0.34 | 0.9674 | superseded by v4 |
+| `models_v4/` | 32 (current) | **max_block=60/topk=60** | 0.96 / 0.20 | **0.9681** | **current** — use this |
 
 `output_v3/matching_results.tsv` + `candidate_pairs.tsv` were generated from
-`models_v3` against the real full test set (this session). Note: `models/` and
-`models_tuned/` live inside `code/business_entity_resolution/`, but `models_v3/` was
-trained with `--models ..\..\models_v3` from inside `code/business_entity_resolution`,
-so it landed at the **repo root** (`student_resource/models_v3/`), one level up from
-the other two — same content either way, just a different path this one time.
+`models_v3` against the real full test set (this session) — that's the current actual
+submission candidate until `output_v4` (from `models_v4`) is generated and validated.
+
+`models_v4`'s widened blocking config (`max_block=60, max_s1_block=200, topk=60`, up
+from 30/200/30) came from Track A (Adithya)'s `adithya-sundar` branch — his branch had
+diverged from `pathu` (missing this session's later Track B work), so rather than
+merging it wholesale, the parameter change alone was cherry-picked into `train.py`'s
+`CFG` and retrained on top of current code. Real improvement (+0.0007), not noise, at
+the cost of ~2x candidates/entity (both train and predict take ~2x longer). Adithya's
+branch also adds an untested `a1_empty` feature (mirrors existing `a2_empty`) — not yet
+folded in.
+
+Note on paths: `models/` and `models_tuned/` live inside
+`code/business_entity_resolution/`, but `models_v3/`/`models_v4/` were trained with
+`--models ..\..\models_v3` (etc.) from inside `code/business_entity_resolution`, so they
+landed at the **repo root** (`student_resource/models_v3/`, `models_v4/`) instead —
+same content either way, just a different path.
 
 ## 5. Known relations / gotchas for the team
 

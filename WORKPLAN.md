@@ -286,7 +286,35 @@ Since model choice isn't the remaining lever, now investigating two other angles
   S1 entity having independent strong evidence from both Source2 and Source3 improve F0.5 over
   today's per-pair-only scoring
 
-Results pending.
+Results (per-country threshold): tested — global F0.5=0.9674 vs per-country combined F0.5=0.9676
+(India thr=0.90/margin=0.34, US thr=0.94/margin=0.38). Delta +0.0002 — within noise, not adopted.
+
+**B6 — Model/feature-count mismatch fix + widened blocking, credit Track A (Pratham/Adithya, 26 Sep ~20:05 IST):**
+Found `models/` and `models_tuned/` were trained on a pre-`bb36851` 33-feature version of `features.py`;
+that commit dropped a dead feature, nobody retrained, so `predict.py` crashed with a LightGBM
+shape-mismatch error. Retrained clean on current code → `models_v3/` (32 features, thr=0.94/margin=0.34,
+val F0.5=0.9674) — this generated the real `output_v3` submission candidate.
+
+Separately, Adithya's `adithya-sundar` branch (Track A) widened blocking from
+`max_block=30/topk=30` to `max_block=60/topk=60` (more candidates survive blocking per S1 entity).
+That branch had diverged from `pathu` (missing this session's later Track B work), so rather than
+merging it directly, the parameter change was tested on top of current `pathu` code:
+
+| config | val F0.5 | thr / margin |
+|---|---|---|
+| max_block=30 / topk=30 (`models_v3`) | 0.9674 | 0.94 / 0.34 |
+| max_block=60 / topk=60 (`models_v4`, Adithya's change) | **0.9681** | 0.96 / 0.20 |
+
++0.0007 — real, adopted as the new production config (`models_v4`). Cost: ~2x candidates per
+S1 entity, so training and prediction both take roughly 2x longer. `train.py`'s `CFG` now defaults
+to the widened values. Not yet re-run against the full test set (still on `output_v3`/`models_v3`
+for the actual submission as of this note) — next step is generating `output_v4` from `models_v4`
+before using it for a real submission.
+
+Also flagged for later testing: Adithya's branch adds a new stage-1 feature `a1_empty` (mirrors the
+existing `a2_empty`) — untested by Track B, could stack on top of the blocking win for more gain.
+
+Cross-source corroboration (`src/cross_source_experiment.py`): still not run.
 
 **B5 — Hand off clean diff to Track D (Day 2 EOD)**
 Commit `features.py` and `model.py` (and any new scratch files like `tune_hyperparams.py`) to `track-b-model` with a summary: "validation F0.5 on sample_dense: before X.XXXX → after X.XXXX; new features: [...]; best hyperparams: [...]".

@@ -17,7 +17,7 @@ from features import pair_features, F1
 from model import fit_stage1, fit_stage2, stage2_matrix, decode, decode_prep, decode_apply, raw2
 from evaluate import f05_macro
 
-CFG = dict(max_block=30, max_s1_block=200, topk=30)
+CFG = dict(max_block=60, max_s1_block=200, topk=60)
 
 
 def main():
