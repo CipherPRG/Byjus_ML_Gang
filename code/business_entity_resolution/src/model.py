@@ -6,10 +6,12 @@ from features import F1
 
 RAW2 = ["nsort", "aset", "ajac", "akey_eq", "a_exact", "anum_first_eq", "w", "ncore_eq", "sk_r", "sk_set",
         "hnum_edit"]
-P1 = dict(n_estimators=500, learning_rate=0.05, num_leaves=63, subsample=0.8, subsample_freq=1,
+# 27 Sep (v8): tree caps raised 500->2000 / 200->800. v7 used ALL 500/200 trees (early stopping never
+# fired = capacity-limited). Early stopping on a held-out half of val now picks the real tree count.
+P1 = dict(n_estimators=2000, learning_rate=0.05, num_leaves=63, subsample=0.8, subsample_freq=1,
           colsample_bytree=0.8, min_child_samples=20, reg_lambda=1.0, is_unbalance=True,
           metric="auc", verbose=-1)
-P2 = dict(n_estimators=200, learning_rate=0.06, num_leaves=31, subsample=0.8, subsample_freq=1,
+P2 = dict(n_estimators=800, learning_rate=0.06, num_leaves=31, subsample=0.8, subsample_freq=1,
           colsample_bytree=0.9, min_child_samples=20, reg_lambda=1.0, is_unbalance=True,
           metric="auc", verbose=-1)
 
@@ -39,10 +41,14 @@ def stage2_matrix(r1, ro, p1, raw):
     return out.astype(np.float32)
 
 
-def fit_stage1(X, y, eval_set=None):
+def fit_stage1(X, y, eval_set=None, n_estimators=None):
     """eval_set: optional (X_val, y_val) tuple. When given, uses early stopping (50 rounds, AUC)
-    instead of training the full fixed n_estimators blind."""
-    m = lgb.LGBMClassifier(**P1)
+    instead of training the full fixed n_estimators blind. n_estimators: override the tree count
+    (used for the OOF fold models so they match the early-stopped main model)."""
+    p = dict(P1)
+    if n_estimators is not None:
+        p["n_estimators"] = int(n_estimators)
+    m = lgb.LGBMClassifier(**p)
     if eval_set is not None:
         Xv, yv = eval_set
         m.fit(X, y, eval_X=Xv, eval_y=yv, eval_metric="auc",
@@ -52,10 +58,13 @@ def fit_stage1(X, y, eval_set=None):
     return m
 
 
-def fit_stage2(X, y, eval_set=None):
+def fit_stage2(X, y, eval_set=None, n_estimators=None):
     """eval_set: optional (X_val, y_val) tuple. When given, uses early stopping (50 rounds, AUC)
     instead of training the full fixed n_estimators blind."""
-    m = lgb.LGBMClassifier(**P2)
+    p = dict(P2)
+    if n_estimators is not None:
+        p["n_estimators"] = int(n_estimators)
+    m = lgb.LGBMClassifier(**p)
     if eval_set is not None:
         Xv, yv = eval_set
         m.fit(X, y, eval_X=Xv, eval_y=yv, eval_metric="auc",

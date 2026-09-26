@@ -7,12 +7,12 @@ from io_utils import read_tsv, read_country
 from norm import generic_addr_tokens
 
 
-def load_side(path, country, chunksize=300_000, stop=frozenset()):
+def load_side(path, country, chunksize=300_000, stop=frozenset(), kv2=False):
     sides = []
     for ch in read_tsv(path, chunksize=chunksize):
         ch = ch[ch.country == country]
         if len(ch):
-            sides.append(Side(ch, stop))
+            sides.append(Side(ch, stop, kv2))
     return Side.concat(sides) if sides else None
 
 
@@ -30,9 +30,10 @@ def build_country(dir_, prefix, country, cfg, workers=1):
     """Returns (s1, oth, cand) for one country. `prefix` = 'train' or 'test'."""
     s1_df = read_country(f"{dir_}/{prefix}_source1.tsv", country)
     stop = country_stop(s1_df, cfg)
-    s1 = Side(s1_df, stop)
+    kv2 = bool(cfg.get("keys_v2", False))  # missing in older configs -> exact old behaviour
+    s1 = Side(s1_df, stop, kv2)
     del s1_df
-    parts = [load_side(f"{dir_}/{prefix}_source{k}.tsv", country, stop=stop) for k in (2, 3)]
+    parts = [load_side(f"{dir_}/{prefix}_source{k}.tsv", country, stop=stop, kv2=kv2) for k in (2, 3)]
     parts = [p for p in parts if p is not None]
     if not parts:
         return s1, None, None

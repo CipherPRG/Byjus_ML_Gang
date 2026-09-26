@@ -5,11 +5,50 @@ import pandas as pd
 from norm import norm_name, norm_addr, addr_keys, ADDR_STOP, skel
 
 # weight of each key type (address keys are the most reliable)
-WEIGHT = {"A": 3, "R": 2, "N": 3, "Q": 2, "P": 2, "T": 1, "U": 1, "S": 1, "K": 1, "V": 2, "X": 3}
+WEIGHT = {"A": 3, "R": 2, "N": 3, "Q": 2, "P": 2, "T": 1, "U": 1, "S": 1, "K": 1, "V": 2, "X": 3,
+          "B": 2, "Y": 2, "C": 3}
+_DOM = ("com", "net", "org")
 
 
-def keys_for(country, core, atoks, stop=frozenset()):
+def _hasdig(t):
+    return any(ch.isdigit() for ch in t)
+
+
+def keys_v2(country, core, atoks, stop):
+    """Extra keys (cfg keys_v2=True), each aimed at a blocking-miss pattern seen on sample data:
+    B  adjacent address bigram containing a number: '4600 24th', '5534 10480', 'c 25', '14 109'
+    Y  unordered (number, rare address word): 'no226|villupuram' even when word order differs
+    C  compact name: 'allshivsystems' / initials+last 'wmbrokerage', matching website-style names
+       'allshivsystemscom' / 'wmbrokeragecom' (single token ending in com/net/org, suffix stripped)"""
     ks = []
+    nb = 0
+    for x, y in zip(atoks, atoks[1:]):
+        if (_hasdig(x) or _hasdig(y)) and len(x) <= 8 and len(y) <= 8 \
+                and x not in ADDR_STOP and y not in ADDR_STOP and x not in stop and y not in stop:
+            ks.append("B|" + country + "|" + x + "|" + y); nb += 1
+            if nb >= 3:
+                break
+    nums = [t for t in atoks if _hasdig(t) and len(t) <= 8][:2]
+    words = sorted({t for t in atoks if len(t) >= 4 and t.isalpha() and t not in ADDR_STOP and t not in stop},
+                   key=lambda t: (-len(t), t))[:4]
+    for n in nums:
+        for wd in words:
+            ks.append("Y|" + country + "|" + n + "|" + wd)
+    if len(core) == 1 and len(core[0]) >= 7 and core[0].endswith(_DOM):
+        ks.append("C|" + country + "|" + core[0][:-3])
+    elif core:
+        j = "".join(core)
+        if len(j) >= 6:
+            ks.append("C|" + country + "|" + j)
+        if len(core) >= 2:
+            ini = "".join(t[0] for t in core[:-1]) + core[-1]
+            if len(ini) >= 6 and ini != j:
+                ks.append("C|" + country + "|" + ini)
+    return ks
+
+
+def keys_for(country, core, atoks, stop=frozenset(), kv2=False):
+    ks = keys_v2(country, core, atoks, stop) if kv2 else []
     for k in addr_keys(atoks, stop=stop):
         ks.append("A|" + country + "|" + k)
     if core:
@@ -57,18 +96,19 @@ def h64(k):
 class Side:
     """Normalised records of one source (one country): ids, clean name/address, blocking keys."""
 
-    def __init__(self, df, stop=frozenset()):
+    def __init__(self, df, stop=frozenset(), kv2=False):
         self.stop = stop  # per-country generic address words (norm.generic_addr_tokens); empty = off
+        self.kv2 = kv2    # keys_v2 blocking keys + ordinal normalisation (cfg keys_v2); False = v7 behaviour
         self.ids = df.entity_id.tolist()
         self.nclean, self.aclean, self.nskel = [], [], []
         key, row, w = [], [], []
         for i, (nm, ad, c) in enumerate(zip(df.business_name.values, df.business_address.values, df.country.values)):
             nc, core = norm_name(nm)
-            ac, at = norm_addr(ad)
+            ac, at = norm_addr(ad, ords=kv2)
             self.nclean.append(nc)
             self.nskel.append(" ".join(x for x in (skel(t) for t in core) if x))
             self.aclean.append(ac)
-            for k in keys_for(c, core, at, stop):
+            for k in keys_for(c, core, at, stop, kv2):
                 key.append(h64(k)); row.append(i); w.append(WEIGHT[k[0]])
         self.key = np.array(key, dtype=np.int64)
         self.krow = np.array(row, dtype=np.int32)
@@ -81,6 +121,7 @@ class Side:
     def concat(sides):
         out = Side.__new__(Side)
         out.stop = sides[0].stop if sides else frozenset()
+        out.kv2 = sides[0].kv2 if sides else False
         out.ids, out.nclean, out.aclean, out.nskel = [], [], [], []
         keys, rows, ws = [], [], []
         off = 0

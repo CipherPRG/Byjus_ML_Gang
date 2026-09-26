@@ -8,7 +8,7 @@ Final mode   — retrains on ALL data (no holdout) using a pre-locked thr/margin
     python src/train.py --data ../../sample_dense --models ../../models_final --final \
         --thr 0.70 --margin 0.20 --workers 4
 """
-import argparse, json, os, zlib
+import argparse, hashlib, json, os, zlib
 import numpy as np
 import pandas as pd
 from io_utils import read_tsv, countries_of
@@ -18,6 +18,12 @@ from model import fit_stage1, fit_stage2, stage2_matrix, decode, decode_prep, de
 from evaluate import f05_macro
 
 CFG = dict(max_block=60, max_s1_block=200, topk=60)
+
+
+def es_half_of(s):
+    """ES/REP half of the val set. MD5, NOT crc32: crc32 is affine, so crc32(s+'e') parity is tied to
+    crc32(s+'v') (which picks val) and gave a 2:1 split correlated with the val selection."""
+    return hashlib.md5((s + "e").encode()).digest()[0] % 2 == 0
 
 
 def main():
@@ -35,9 +41,14 @@ def main():
     ap.add_argument("--addr-stop-frac", type=float, default=None,
                     help="skip address words present in more than this fraction of a country's addresses "
                          "when building address keys (e.g. 0.01). Saved into config.json so predict matches.")
+    ap.add_argument("--keys-v2", action="store_true",
+                    help="extra blocking keys (address number bigrams, number x rare word, compact/website "
+                         "names) + ordinal normalisation. Saved into config.json so predict matches.")
     a = ap.parse_args()
     if a.addr_stop_frac is not None:
         CFG["addr_stop_frac"] = a.addr_stop_frac
+    if a.keys_v2:
+        CFG["keys_v2"] = True
     print(f"CFG = {CFG}")
 
     if a.final and (a.thr is None or a.margin is None):
@@ -87,6 +98,12 @@ def main():
     else:
         is_val = np.array([zlib.crc32((s + "v").encode()) % 10 < 3 for s in u1])[r1]
         tr     = ~is_val
+    # Val is split per S1 entity into two halves:
+    #   ES  half -> early stopping (tree count) + thr/margin choice  (used for decisions)
+    #   REP half -> never used for any choice: an honest, unbiased report score
+    es_half = np.array([es_half_of(s) for s in u1])[r1]
+    is_es   = is_val & es_half
+    is_rep  = is_val & ~es_half
 
     fold = np.array([zlib.crc32((s + "f").encode()) % 2 for s in u1])[r1]
 
@@ -106,11 +123,15 @@ def main():
                 p1[pred_mask] = fit_stage1(X[fit_mask], Y[fit_mask]).predict_proba(X[pred_mask])[:, 1]
         m1 = fit_stage1(X, Y)            # final stage-1 on ALL data
     else:
+        # main model first: early stopping on the ES half picks the tree count n1 ...
+        m1 = fit_stage1(X[tr], Y[tr], eval_set=(X[is_es], Y[is_es]))
+        n1 = m1.best_iteration_ or m1.n_estimators
+        print(f"stage-1 trees: {n1} (cap {m1.n_estimators})", flush=True)
+        # ... then the OOF fold models use the same n1, so train-p1 and val-p1 come from equal-size models
         for f in (0, 1):
             fit  = tr & (fold != f)
             pred = tr & (fold == f)
-            p1[pred] = fit_stage1(X[fit], Y[fit]).predict_proba(X[pred])[:, 1]
-        m1 = fit_stage1(X[tr], Y[tr], eval_set=(X[is_val], Y[is_val]))
+            p1[pred] = fit_stage1(X[fit], Y[fit], n_estimators=n1).predict_proba(X[pred])[:, 1]
         p1[is_val] = m1.predict_proba(X[is_val])[:, 1]
 
     # ------------------------------------------------------------------ stage 2
@@ -118,7 +139,8 @@ def main():
     if a.final:
         m2 = fit_stage2(X2, Y)
     else:
-        m2 = fit_stage2(X2[tr], Y[tr], eval_set=(X2[is_val], Y[is_val]))
+        m2 = fit_stage2(X2[tr], Y[tr], eval_set=(X2[is_es], Y[is_es]))
+        print(f"stage-2 trees: {m2.best_iteration_ or m2.n_estimators} (cap {m2.n_estimators})", flush=True)
     p2 = m2.predict_proba(X2)[:, 1]
 
     # ------------------------------------------------------------------ threshold / margin sweep
@@ -139,11 +161,15 @@ def main():
         # that's a sign the true optimum is outside the tested range, not that 0.91/0.30 is it.
         # is_unbalance reweights the loss and pushes predicted probabilities more extreme, which
         # shifts where the best thr/margin sits - so widen until the winner stops landing on an edge.
-        val_ids = {k for k in truth if zlib.crc32((k + "v").encode()) % 10 < 3}
+        all_val = {k for k in truth if zlib.crc32((k + "v").encode()) % 10 < 3}
+        val_ids = {k for k in all_val if es_half_of(k)}                              # ES half: choose here
+        rep_ids = all_val - val_ids                                                  # REP half: report only
         vt      = {k: v for k, v in truth.items() if k in val_ids}
         best    = (-1.0, 0.5, 0.0)
 
-        thr_grid    = np.arange(0.30, 0.99, 0.02)
+        # 27 Sep: extended past 0.98 - at realistic density (sample_v2) the optimum landed exactly on 0.98,
+        # the old grid's top edge, so the true optimum may be stricter.
+        thr_grid    = np.concatenate([np.arange(0.30, 0.98, 0.02), [0.98, 0.985, 0.99, 0.993, 0.996, 0.998]])
         margin_grid = np.arange(0.00, 0.45, 0.02)
         print(f"sweeping {len(thr_grid)} thresholds x {len(margin_grid)} margins "
               f"= {len(thr_grid)*len(margin_grid)} combos …")
@@ -165,16 +191,35 @@ def main():
                 if sc > best[0]:
                     best = (sc, float(thr), float(mg))
 
-        print(f"validation macro F0.5 = {best[0]:.4f}  "
-              f"at thr={best[1]:.2f} margin={best[2]:.2f}  (val S1: {len(vt)})")
+        print(f"ES-half macro F0.5 = {best[0]:.4f}  "
+              f"at thr={best[1]:.3f} margin={best[2]:.2f}  (ES S1: {len(vt)})  [used for choices]")
+
+        # Honest scores at the chosen thr/margin. REP half was never used for any choice.
+        rr, oo = decode_apply(prepped, best[1], best[2])
+        pred_all = {}
+        for i, o in zip(rr, oo):
+            s = u1[i]
+            if s in all_val:
+                pred_all.setdefault(s, set()).add(uo[o])
+        rt = {k: v for k, v in truth.items() if k in rep_ids}
+        at = {k: v for k, v in truth.items() if k in all_val}
+        rep_f05 = f05_macro({k: v for k, v in pred_all.items() if k in rep_ids}, rt)
+        all_f05 = f05_macro(pred_all, at)
+        print(f"CLEAN report-half macro F0.5 = {rep_f05:.4f}  (REP S1: {len(rt)})  <- honest number")
+        print(f"full-val macro F0.5          = {all_f05:.4f}  (val S1: {len(at)})  <- compare to v7 0.9452")
 
     # ------------------------------------------------------------------ save
     m1.booster_.save_model(f"{a.models}/stage1.txt")
     m2.booster_.save_model(f"{a.models}/stage2.txt")
     val_f05 = best[0] if (best[0] is not None) else "N/A (final mode)"
+    extra = {}
+    if not a.final and best[0] is not None:
+        extra = dict(rep_f05_clean=rep_f05, full_val_f05=all_f05,
+                     n_trees_stage1=int(m1.best_iteration_ or m1.n_estimators),
+                     n_trees_stage2=int(m2.best_iteration_ or m2.n_estimators))
     json.dump(
         dict(cfg=CFG, thr=best[1], margin=best[2], val_f05=val_f05,
-             final_mode=a.final),
+             final_mode=a.final, **extra),
         open(f"{a.models}/config.json", "w"), indent=2
     )
     print(f"saved models to {a.models}/")

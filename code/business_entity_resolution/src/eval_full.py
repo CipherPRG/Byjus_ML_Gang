@@ -17,7 +17,7 @@ Usage (from code/business_entity_resolution):
     python -u src/eval_full.py --data ../../dataset/train --models ../../models_v3 \
         --exclude ../../sample_dense/train_source1.tsv --cache ../../eval_cache --workers 8
 """
-import argparse, json, os, pickle, time
+import argparse, json, os, pickle, time, zlib
 import numpy as np
 import lightgbm as lgb
 from io_utils import read_tsv, countries_of
@@ -25,7 +25,8 @@ from pipeline import build_country
 from features import pair_features
 from model import stage2_matrix, raw2, decode_prep
 
-THR_GRID = np.round(np.arange(0.30, 0.99, 0.04), 2)
+THR_GRID = np.concatenate([np.round(np.arange(0.30, 0.98, 0.04), 2), [0.94, 0.96, 0.97, 0.98, 0.985, 0.99, 0.993, 0.996, 0.998]])
+THR_GRID = np.unique(THR_GRID)
 MARGIN_GRID = np.round(np.arange(0.00, 0.41, 0.04), 2)
 
 
@@ -90,6 +91,9 @@ def main():
                     help="TSV whose entity_id column lists S1 ids to leave out of scoring (training sample)")
     ap.add_argument("--cache", default=None, help="folder to save per-country arrays for follow-up analysis")
     ap.add_argument("--countries", nargs="*", default=None, help="e.g. --countries India (default: all)")
+    ap.add_argument("--val-split", action="store_true",
+                    help="score only train.py's held-out validation entities (crc32(id+'v')%%10<3), so a model "
+                         "trained on this --data folder can be compared fairly against another model")
     a = ap.parse_args()
 
     conf = json.load(open(f"{a.models}/config.json"))
@@ -112,7 +116,8 @@ def main():
         t0 = time.time()
         s1, oth, cand = build_country(a.data, "train", c, cfg, a.workers)
         n1 = len(s1)
-        scored = np.fromiter((s not in excl for s in s1.ids), dtype=bool, count=n1)
+        scored = np.fromiter((s not in excl and (not a.val_split or zlib.crc32((s + "v").encode()) % 10 < 3)
+                              for s in s1.ids), dtype=bool, count=n1)
         n_true = np.zeros(n1, dtype=np.int64)
         for i, s in enumerate(s1.ids):
             m = truth.get(s, "")
