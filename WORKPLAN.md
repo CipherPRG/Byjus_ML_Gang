@@ -123,6 +123,8 @@ Four people, four parallel tracks. Tracks A, B, C work independently on separate
 #### Why this track matters
 Blocking recall is the hard ceiling on model F0.5. Every true match that blocking misses is a guaranteed false negative. The current `decode()` also enforces a 1-to-1 assignment (each S2/S3 to its best S1), so high-weight shared keys are critical.
 
+**Note (Pratham, 26 Sep ~05:49 IST):** as of the current `sample_dense` runs (with Track B's 6 new features on top), overall blocking recall is still **0.9545** (India 0.9284 / US 0.9720) — unchanged, since features.py doesn't touch blocking. That means ~4.5% of true matches are structurally unrecoverable no matter what the model/features do — this is a harder ceiling on F0.5 than feature engineering. **Track A: this is probably higher-leverage right now than anything Track B can still squeeze out of features** — if `blocking_audit.py` (A2) hasn't identified the missed-pair patterns yet, that's likely the best use of remaining time.
+
 #### Concrete tasks
 
 **A1 — Measure current blocking recall on sample_dense (Day 1, tonight)**
