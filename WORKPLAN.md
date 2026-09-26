@@ -260,6 +260,34 @@ Pushed to `pathu` branch (commits `c9b7817`, `bb36851`):
 
 Branch is merge-ready for Track D.
 
+**B3/B4/B4.5 — Extended model comparison (Pratham, 26 Sep ~18:30 IST):**
+Benchmarked several alternative stage1 model families through the exact same OOF + stage2 +
+decode evaluation pipeline (`src/model_bench.py`), to check whether a different classifier could
+beat the current LightGBM config:
+
+| model | val F0.5 |
+|---|---|
+| **LightGBM (current)** | **0.9674** |
+| Ensemble blend (LightGBM + XGBoost) | 0.9669 |
+| XGBoost | 0.9666 |
+| RandomForest(200) | 0.9643 |
+| GPU-trained neural net (PyTorch, deeper config) | 0.9644 |
+| CatBoost | 0.9642 |
+| GPU-trained neural net (PyTorch) | 0.9640 |
+| LogisticRegression | 0.9570 |
+
+Result: LightGBM stays the production model — none of the alternatives beat it. This closes out
+the "which classifier" question with real evidence across 8 model families rather than assumption.
+
+Since model choice isn't the remaining lever, now investigating two other angles instead:
+- Per-country threshold/margin (`src/per_country_threshold.py`) — blocking recall already differs a
+  lot by country (India 0.9284 vs US 0.9720), so one global thr/margin may be a compromise
+- Cross-source corroboration as a new stage2 feature (`src/cross_source_experiment.py`) — does an
+  S1 entity having independent strong evidence from both Source2 and Source3 improve F0.5 over
+  today's per-pair-only scoring
+
+Results pending.
+
 **B5 — Hand off clean diff to Track D (Day 2 EOD)**
 Commit `features.py` and `model.py` (and any new scratch files like `tune_hyperparams.py`) to `track-b-model` with a summary: "validation F0.5 on sample_dense: before X.XXXX → after X.XXXX; new features: [...]; best hyperparams: [...]".
 
