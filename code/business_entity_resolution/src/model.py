@@ -1,4 +1,12 @@
-"""Two-stage matcher: stage 1 = pair features -> p1; stage 2 = context of p1 inside the S1 / S2-S3 neighbourhood -> p2."""
+"""Two-stage matcher and decoders.
+
+Stage 1: LightGBM on pair features -> p1.
+Stage 2: LightGBM on the competition around each pair (its rank / gap / rivals among the S1's candidates and
+         among the S1 options of the S2/S3 record) + a few raw pair features -> p2.
+Decoding: every S2/S3 record is assigned to at most one S1 (its best). Two rules:
+  - decode():    keep it if p2 >= thr and p2 - runner-up >= margin (thr/margin chosen on validation);
+  - decode_ef(): expected-F0.5 decoder - calibrated probabilities + per-S1 choice of how many matches to keep.
+"""
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
@@ -6,8 +14,7 @@ from features import F1
 
 RAW2 = ["nsort", "aset", "ajac", "akey_eq", "a_exact", "anum_first_eq", "w", "ncore_eq", "sk_r", "sk_set",
         "hnum_edit"]
-# 27 Sep (v8): tree caps raised 500->2000 / 200->800. v7 used ALL 500/200 trees (early stopping never
-# fired = capacity-limited). Early stopping on a held-out half of val now picks the real tree count.
+# Tree caps are upper bounds only: early stopping on the ES half of validation picks the real tree count.
 P1 = dict(n_estimators=2000, learning_rate=0.05, num_leaves=63, subsample=0.8, subsample_freq=1,
           colsample_bytree=0.8, min_child_samples=20, reg_lambda=1.0, is_unbalance=True,
           metric="auc", verbose=-1)
@@ -17,24 +24,17 @@ P2 = dict(n_estimators=800, learning_rate=0.06, num_leaves=31, subsample=0.8, su
 
 
 def raw2(X):
-    """the few raw pair features that stage 2 keeps (small memory)"""
+    """The few raw pair features that stage 2 keeps (small memory)."""
     return X[:, [F1.index(c) for c in RAW2]].astype(np.float32)
 
 
 def stage2_matrix(r1, ro, p1, raw, density=None):
-    """Context features from p1: rank/gap/top competitor inside each S1 and each S2/S3 record.
+    """Stage-2 matrix: context of p1 inside each S1's candidate list and each S2/S3 record's S1 options
+    (rank, gap to the best, strongest rival, sum of rivals) + the RAW2 raw pair features -> 19 columns.
 
-    density (feat_v3 only, default None): dict with keys 'addr' and 'name', each mapping a
-    normalised string -> count in the FULL source1 file (train_source1 at training time,
-    test_source1 at predict time — NOT counts inside the sample).  When None, the function
-    produces exactly 19 columns, identical to v8/v9.  When provided, two extra columns are
-    appended (21 total):
-      log1p_addr_density: log1p(count of S1 entities sharing this 'other' record's norm address)
-      log1p_name_density: log1p(count of S1 entities sharing this 'other' record's norm name core)
-    High density = non-specific address/name (sibling businesses at the same location).
-    Both are properties of the 'other' (S2/S3) record indexed by ro; they are passed in via
-    the `density` dict rather than being broadcast inside stage2_matrix to keep the RAM cost
-    outside the function (density dicts are built once per country before the loop)."""
+    density (feat_v3 only): {"addr_by_ro": array, "name_by_ro": array}, aligned with the rows, giving how many
+    Source-1 businesses (per 100k, counted in the FULL S1 file) share the S2/S3 record's exact normalised
+    address / name skeleton. High = non-specific (sibling businesses). Adds 2 log1p columns (21 in total)."""
     d = pd.DataFrame({"r1": r1, "ro": ro, "p": p1})
     g1 = d.groupby("r1").p; go = d.groupby("ro").p
     cols = {
@@ -51,7 +51,6 @@ def stage2_matrix(r1, ro, p1, raw, density=None):
     for j, c in enumerate(RAW2):
         out[c] = raw[:, j]
     if density is not None:
-        # ro indexes into the 'other' (S2/S3) Side; density arrays are pre-built per-ro outside
         out["log1p_addr_density"] = np.log1p(density["addr_by_ro"]).astype(np.float32)
         out["log1p_name_density"] = np.log1p(density["name_by_ro"]).astype(np.float32)
     return out.astype(np.float32)
@@ -91,10 +90,8 @@ def fit_stage2(X, y, eval_set=None, n_estimators=None):
 
 
 def decode_prep(r1, ro, p):
-    """The expensive, thr/margin-INDEPENDENT part of decode(): sort once, find each 'other'
-    record's best and runner-up candidate. Call this ONCE, then decode_apply() many times for
-    a threshold/margin sweep instead of re-sorting the whole dataframe per combo (this was the
-    actual bottleneck in the 384-combo sweep - each combo used to redo this full sort)."""
+    """The expensive, thr/margin-independent part of decode(): sort once and find each S2/S3 record's best
+    and runner-up candidate. Call it once, then decode_apply() for every threshold/margin combination."""
     d = pd.DataFrame({"r1": r1, "ro": ro, "p": p}).sort_values(["ro", "p"], ascending=[True, False])
     first = d.groupby("ro").head(1).set_index("ro")
     second = d.groupby("ro").nth(1).set_index("ro").p

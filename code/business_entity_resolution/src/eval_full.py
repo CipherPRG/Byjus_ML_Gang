@@ -48,6 +48,7 @@ def f05_vec(n_pred, n_true, tp):
 
 
 def breakdown(label, n_pred, n_true, tp, n_blk, scored):
+    """Print macro F0.5, the recall ceiling and where the lost points go; return the macro F0.5."""
     f = f05_vec(n_pred, n_true, tp)
     ceil = f05_vec(n_blk, n_true, n_blk)
     N = int(scored.sum())
@@ -79,6 +80,7 @@ def breakdown(label, n_pred, n_true, tp, n_blk, scored):
 
 
 def main():
+    """Score a saved model on a labelled folder, per country, with a loss breakdown."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="dataset/train folder (must contain train_ground_truth.tsv)")
     ap.add_argument("--models", required=True, help="folder with config.json, stage1.txt, stage2.txt")
@@ -204,6 +206,7 @@ def main():
         print(f"[{c}] done in {time.time() - t0:.0f}s", flush=True)
 
     def assemble(t_, m_):
+        """Predicted-pair and true-positive counts per S1 for one thr/margin (all countries)."""
         npd, tpp = [], []
         for g in G:
             k = (g["p"] >= t_) & ((g["p"] - g["pp"]) >= m_)

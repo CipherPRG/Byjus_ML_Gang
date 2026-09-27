@@ -140,6 +140,7 @@ def skel(tok: str) -> str:
 
 
 def strip_accents(s: str) -> str:
+    """Remove accents / diacritics (NFKD + drop combining marks); ASCII text is returned as is."""
     if s.isascii():  # NFKD never changes ASCII and ASCII has no combining marks -> same result
         return s
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))

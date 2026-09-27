@@ -1,13 +1,12 @@
-"""Training sample WITH rival businesses (fixes the train/test competition mismatch of sample_v2).
+"""Training sample WITH the real competing (rival) businesses.
 
-Measured problem (rival_density.py): in the real test every S2/S3 record is a blocking candidate of
-~9.5 S1 businesses on average (71% have >= 5); in sample_v2 only ~2 (3-7% have >= 5), because
-sample_v2 keeps only the sampled 5% of S1 and drops every rival S1. Stage 2's competition features
-(rank / gap / strongest rival inside each S2/S3 record) and the "best S1 wins" decode were therefore
-trained and validated with ~5x too little competition.
+Why: on the real test every S2/S3 record is a blocking candidate of ~9.5 Source-1 businesses on average (71% have
+>= 5). A sample that keeps only the sampled S1 has ~2 (3-7% have >= 5) because it drops every rival S1, so stage 2's
+competition features (rank / gap / strongest rival) and the "best S1 wins" decoder would be trained and validated
+with ~5x too little competition.
 
 This builder runs the REAL blocking on the full train data (same cfg as predict) and writes:
-  train_source1.tsv       sampled S1 (same hash as sample_v2: same entities at the same --frac)
+  train_source1.tsv       sampled S1 (crc32 hash of the entity id < --frac)
                           + every rival S1 that is a real candidate of a kept S2/S3 record
   train_source2/3.tsv     S2/S3 records that are candidates of sampled S1 + true matches of sampled S1
   train_ground_truth.tsv  rows for the SAMPLED S1 only (rivals are context, never trained on or scored)
@@ -27,11 +26,13 @@ from pipeline import build_country
 CFG_BASE = dict(max_block=60, max_s1_block=200, topk=60)
 
 
-def keep_s1(eid, frac):  # identical to make_sample_v2_fixed._keep_s1
+def keep_s1(eid, frac):  # same hash as experiments/make_sample_v2_fixed.py
+    """True if this Source-1 id is in the sample (deterministic crc32 hash)."""
     return zlib.crc32(eid.encode("utf-8")) % 1_000_000 < int(frac * 1_000_000)
 
 
 def write_filtered(src, dst, keep):
+    """Copy the header and the rows whose entity_id is in `keep` from src to dst."""
     n, seen = 0, set()
     with open(src, "r", encoding="utf-8", errors="replace", newline="") as fi, \
             open(dst, "w", encoding="utf-8", newline="\n") as fo:
@@ -47,6 +48,7 @@ def write_filtered(src, dst, keep):
 
 
 def main():
+    """Build the rival-aware training sample (see module docstring)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)

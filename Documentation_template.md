@@ -181,6 +181,18 @@ loss breakdown. `tests/test_pipeline.py` has 20 fast unit tests (`python -m unit
 `experiments/` holds one-off analysis scripts that are not needed to reproduce. Exact commands, pinned
 versions and run times are in `code/business_entity_resolution/README.md`; internals in `ARCHITECTURE.md`.
 
+### Fair play / external data
+
+The pipeline uses **only the provided training and test files**. There are no API calls, no network access, no
+geocoding, no business registries and no pretrained models or external datasets anywhere in the code (the pipeline
+imports only numpy, pandas, rapidfuzz, lightgbm, scikit-learn, psutil and the Python standard library; the
+model-comparison script in `experiments/` optionally also tried xgboost / catboost / a small torch MLP, all
+trained from scratch on the provided data). All learned
+quantities (generic address words, IDF weights, sibling density, both LightGBM stages, the decoder) are computed
+from the provided data; the small normalisation dictionaries (legal suffixes, street abbreviations, US state names,
+ordinals) are general language knowledge written in the code. The final model is LightGBM (MIT licence), far
+below the 8B-parameter limit.
+
 ### B. Additional Results
 
 - Rival density (mean S1 candidates per S2/S3 record): sparse training sample India 2.0 / US 1.8;

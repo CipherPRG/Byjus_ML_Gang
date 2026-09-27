@@ -17,11 +17,13 @@ H = lambda s: zlib.crc32(s.encode("utf-8")) % 1_000_000     # identical to make_
 
 
 def chunks(path):
+    """Stream a train_pairs.tsv in 2M-row chunks."""
     return pd.read_csv(path, sep="\t", dtype={"s1_id": str, "oth_id": str, "w": np.float32, "country": str},
                        chunksize=2_000_000, keep_default_na=False)
 
 
 def write_filtered(src, dst, keep):
+    """Copy the header and the rows whose entity_id is in `keep` from src to dst."""
     n = 0
     with open(src, "r", encoding="utf-8", errors="replace", newline="") as fi, \
             open(dst, "w", encoding="utf-8", newline="\n") as fo:
@@ -34,6 +36,7 @@ def write_filtered(src, dst, keep):
 
 
 def main():
+    """Shrink a sample_v3 folder to a smaller --frac (see module docstring)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True); ap.add_argument("--out", required=True)
     ap.add_argument("--max-rows", type=float, default=33e6); ap.add_argument("--frac", type=float, default=None)

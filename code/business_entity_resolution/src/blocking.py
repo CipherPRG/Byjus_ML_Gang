@@ -68,6 +68,7 @@ def keys_v3(country, core, atoks, stop):
 
 
 def keys_for(country, core, atoks, stop=frozenset(), kv2=False):
+    """All normal blocking keys of one record (country-scoped strings; typed by their first letter)."""
     ks = keys_v2(country, core, atoks, stop) if kv2 else []
     for k in addr_keys(atoks, stop=stop):
         ks.append("A|" + country + "|" + k)
@@ -109,6 +110,7 @@ def keys_for(country, core, atoks, stop=frozenset(), kv2=False):
 
 
 def h64(k):
+    """Stable 63-bit integer hash of a key string (crc32 << 32 | adler32): identical on every run/OS."""
     b = k.encode("utf-8")
     return ((zlib.crc32(b) & 0x7FFFFFFF) << 32) | zlib.adler32(b)
 
@@ -118,7 +120,7 @@ class Side:
 
     def __init__(self, df, stop=frozenset(), kv2=False, extra_legal_sk=frozenset(), kv3=False):
         self.stop = stop  # per-country generic address words (norm.generic_addr_tokens); empty = off
-        self.kv2 = kv2    # keys_v2 blocking keys + ordinal normalisation (cfg keys_v2); False = v7 behaviour
+        self.kv2 = kv2    # keys_v2 blocking keys + ordinal normalisation (cfg keys_v2)
         self.extra_legal_sk = extra_legal_sk  # feat_v3: extra learned suffix skeletons; frozenset() = off
         self.ids = df.entity_id.tolist()
         self.nclean, self.aclean, self.nskel = [], [], []
@@ -147,6 +149,7 @@ class Side:
 
     @staticmethod
     def concat(sides):
+        """Merge several Sides (e.g. Source 2 and Source 3 chunks) into one, re-basing the row indices."""
         out = Side.__new__(Side)
         out.stop = sides[0].stop if sides else frozenset()
         out.kv2 = sides[0].kv2 if sides else False

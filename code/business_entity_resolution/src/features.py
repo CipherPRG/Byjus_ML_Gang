@@ -7,7 +7,7 @@ from rapidfuzz import fuzz
 from rapidfuzz.distance import JaroWinkler, Levenshtein
 from norm import LEGAL, addr_keys, _hasdig
 
-# Base feature list (36): flag-off path.  Must stay identical to v8/v9 so old model files load cleanly.
+# Base feature list (36 columns). The order is part of the saved model: never reorder, only append.
 F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "nlen_d", "nfirst_eq", "ncomp",
       "ar", "asort", "aset", "apart", "ajac", "anum_jac", "anum_eq", "a2_empty",
       "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w",
@@ -15,7 +15,7 @@ F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "n
       "a1_empty", "both_empty",
       "hnum_edit", "hnum_logdiff"]
 
-# Extended feature list (38): feat_v3=True only.  Two new features appended at the end so that
+# Extended feature list (42 columns, feat_v3=True): six features appended at the end so that
 # F1[:36] == F1_V3[:36] and existing RAW2 index lookups are unaffected.
 F1_V3 = F1 + [
     "nspan_jac",  # Jaccard over pure digit runs in each address; more robust than anum_jac for
@@ -121,7 +121,7 @@ def _chunk(args):
         e1, e2 = not a1, not a2
         both = not (e1 or e2)
         h_edit, h_gap = _hnum_d(d1, d2)
-        # Base 36 features — identical to v8/v9 flag-off path
+        # base 36 features (F1 order)
         base = (
             fuzz.ratio(n1, n2), fuzz.token_sort_ratio(n1, n2), fuzz.token_set_ratio(n1, n2), fuzz.partial_ratio(n1, n2),
             JaroWinkler.similarity(j1, j2), Levenshtein.normalized_similarity(j1, j2),
@@ -154,8 +154,8 @@ def _chunk(args):
 
 def pair_features(s1, oth, r1, ro, w, workers=1, chunk=20000, feat_v3=False):
     """Feature matrix float32 for pairs (S1 row r1, other row ro).
-    feat_v3=False (default): shape (N, 36), identical to v8/v9.
-    feat_v3=True:            shape (N, 38), appends nspan_jac and sk_eq."""
+    feat_v3=False (default): shape (N, 36) = F1.
+    feat_v3=True:            shape (N, 42) = F1_V3 (F1 + digit-span Jaccard, skeleton equality, IDF similarities)."""
     stop = getattr(s1, "stop", frozenset())  # per-country generic address words, same set blocking used
     jobs = []
     for s in range(0, len(r1), chunk):

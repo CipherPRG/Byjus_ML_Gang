@@ -3,12 +3,12 @@ import os
 import numpy as np
 import pandas as pd
 from blocking import Side, candidates, candidates_extra
-from features import pair_features
 from io_utils import read_tsv, read_country
 from norm import generic_addr_tokens, learn_legal_sk, norm_addr, norm_name, skel
 
 
 def load_side(path, country, chunksize=300_000, stop=frozenset(), kv2=False, extra_legal_sk=frozenset(), kv3=False):
+    """Stream one source file and build a Side (normalised records + keys) for one country."""
     sides = []
     for ch in read_tsv(path, chunksize=chunksize):
         ch = ch[ch.country == country]
@@ -35,7 +35,7 @@ def build_country(dir_, prefix, country, cfg, workers=1, density_src=None):
     a sample, which has ~20x fewer S1). learn_suffix (cfg): legal suffixes learned from this S1 file."""
     s1_df = read_country(f"{dir_}/{prefix}_source1.tsv", country)
     stop = country_stop(s1_df, cfg)
-    kv2 = bool(cfg.get("keys_v2", False))  # missing in older configs -> exact old behaviour
+    kv2 = bool(cfg.get("keys_v2", False))  # absent in older configs -> off
     xsk = learn_legal_sk(s1_df.business_name.values) if cfg.get("learn_suffix") else frozenset()
     pf = f"{dir_}/{prefix}_pairs.tsv"
     # keys_v3 (EXTRA candidates, set only by predict/eval --keys-v3): never used with a recorded pairs file
@@ -98,6 +98,7 @@ def attach_density(oth, s1_path, country, kv2, xsk, chunksize=300_000, s1=None):
 
 
 def load_pairs(path, country, s1, oth, chunksize=2_000_000):
+    """Load the recorded candidate pairs of a sample_v3 folder for one country (s1/other row ids + weight)."""
     i1 = {e: i for i, e in enumerate(s1.ids)}
     io = {e: i for i, e in enumerate(oth.ids)}
     R1, RO, W = [], [], []

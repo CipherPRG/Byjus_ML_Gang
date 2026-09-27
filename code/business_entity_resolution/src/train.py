@@ -1,12 +1,16 @@
-"""Train the two-stage matcher on a (dense) training sample and tune the decision threshold for macro F0.5.
+"""Train the two-stage matcher and choose the decision rule for macro F0.5.
 
-Normal mode  — trains on sample_dense, holds out 30 % for validation, sweeps thr/margin, saves models/:
-    python src/train.py --data ../../sample_dense --models ../../models --workers 4
+Validation protocol: 30% of the labelled Source-1 entities are held out (hash-based). The held-out set is split
+again into an ES half (early stopping, threshold/margin, decoder: every choice) and a REP half that is never used
+for any choice; its score is printed as "CLEAN report-half" and is the honest estimate.
 
-Final mode   — retrains on ALL data (no holdout) using a pre-locked thr/margin from an existing config.json,
-               saves to models_final/.  Run this ONLY after thr/margin are confirmed from a normal-mode run:
-    python src/train.py --data ../../sample_dense --models ../../models_final --final \
-        --thr 0.70 --margin 0.20 --workers 4
+Usage (from code/business_entity_resolution; the configuration used for the submitted model):
+    python src/train.py --data ../../sample_v3_25 --models ../../models_v11 --workers 10 --addr-stop-frac 0.01 \
+        --keys-v2 --feat-v3 --density-src ../../dataset/train/train_source1.tsv
+
+Writes <models>/config.json (blocking config + flags + chosen thr/margin + scores), stage1.txt, stage2.txt and,
+when it beats the threshold rule on the ES half, decoder.json (expected-F0.5 decoder).
+--final retrains on all labelled data with a thr/margin fixed in advance (no holdout, so no scores).
 """
 import argparse, hashlib, json, os, zlib
 import numpy as np
@@ -14,7 +18,7 @@ import pandas as pd
 from io_utils import read_tsv, countries_of
 from pipeline import build_country
 from features import pair_features, F1, F1_V3
-from model import fit_stage1, fit_stage2, stage2_matrix, decode, decode_prep, decode_apply, raw2
+from model import fit_stage1, fit_stage2, stage2_matrix, decode_prep, decode_apply, raw2
 from model import best_assignment, fit_ef_decoder, decode_ef_assigned
 from evaluate import f05_macro
 
@@ -28,8 +32,10 @@ def es_half_of(s):
 
 
 def main():
+    """Build features, train both stages, choose the decision rule on the ES half and save the model folder."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data",    required=True,  help="path to sample_dense/ (or full train/) folder")
+    ap.add_argument("--data",    required=True,  help="labelled data folder (train_source1/2/3 + ground truth), "
+                                                            "e.g. sample_v3_25")
     ap.add_argument("--models",  required=True,  help="output directory for model artefacts")
     ap.add_argument("--workers", type=int, default=1)
     # --final: skip val holdout, use all data for training.  Must supply --thr and --margin.
@@ -49,8 +55,9 @@ def main():
                     help="extra blocking keys (address number bigrams, number x rare word, compact/website "
                          "names) + ordinal normalisation. Saved into config.json so predict matches.")
     ap.add_argument("--feat-v3", action="store_true",
-                    help="2 extra pair features (nspan_jac, sk_eq) + 2 stage-2 density features (how many S1 share "
-                         "this record's address / name, from the FULL S1 file). Saved in config.json.")
+                    help="6 extra pair features (digit-span Jaccard, skeleton equality, IDF-weighted name/address "
+                         "similarity) + 2 stage-2 density features (how many S1 share this record's address / "
+                         "name, counted in the FULL S1 file). Saved in config.json.")
     ap.add_argument("--learn-suffix", action="store_true",
                     help="strip legal suffixes learned from S1 names (norm.learn_legal_sk). Saved in config.json.")
     ap.add_argument("--density-src", default=None,
@@ -169,7 +176,6 @@ def main():
     #   REP half -> never used for any choice: an honest, unbiased report score
     es_half = np.array([es_half_of(s) for s in u1])[r1]
     is_es   = is_val & es_half
-    is_rep  = is_val & ~es_half
 
     fold = np.array([zlib.crc32((s + "f").encode()) % 2 for s in u1])[r1]
 
@@ -238,28 +244,22 @@ def main():
         print(f"fixed thr/margin supplied: thr={best[1]:.2f} margin={best[2]:.2f} (sweep skipped)")
 
     else:
-        # ---- Fine-grained sweep ----
-        # WIDENED again (26 Sep, post is_unbalance=True): a prior run with is_unbalance=True hit
-        # thr=0.91 margin=0.30, right at the old grid's edge (thr 0.45-0.92, margin 0.00-0.32) -
-        # that's a sign the true optimum is outside the tested range, not that 0.91/0.30 is it.
-        # is_unbalance reweights the loss and pushes predicted probabilities more extreme, which
-        # shifts where the best thr/margin sits - so widen until the winner stops landing on an edge.
+        # ---- threshold / margin sweep on the ES half
+        # is_unbalance=True pushes p2 towards 0/1, so the optimum threshold is high: the grid is dense up to
+        # 0.998 so the chosen value never sits on the grid edge.
         all_val = {k for k in truth if zlib.crc32((k + "v").encode()) % 10 < 3}
         val_ids = {k for k in all_val if es_half_of(k)}                              # ES half: choose here
         rep_ids = all_val - val_ids                                                  # REP half: report only
         vt      = {k: v for k, v in truth.items() if k in val_ids}
         best    = (-1.0, 0.5, 0.0)
 
-        # 27 Sep: extended past 0.98 - at realistic density (sample_v2) the optimum landed exactly on 0.98,
-        # the old grid's top edge, so the true optimum may be stricter.
         thr_grid    = np.concatenate([np.arange(0.30, 0.98, 0.02), [0.98, 0.985, 0.99, 0.993, 0.996, 0.998]])
         margin_grid = np.arange(0.00, 0.45, 0.02)
         print(f"sweeping {len(thr_grid)} thresholds x {len(margin_grid)} margins "
               f"= {len(thr_grid)*len(margin_grid)} combos …")
 
-        # decode_prep does the expensive sort/groupby ONCE (thr/margin don't affect it);
-        # decode_apply per combo is then just a cheap boolean filter. The old code called
-        # decode() (full re-sort) 384 times - this is the same result, much faster.
+        # decode_prep does the expensive sort/groupby ONCE (it does not depend on thr/margin);
+        # decode_apply per combination is then a cheap boolean filter.
         prepped = decode_prep(r1, ro, p2)
 
         for thr in thr_grid:

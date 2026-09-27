@@ -11,9 +11,8 @@ Lower the stage-1 batch size if you hit RAM errors (default 2 000 000 pairs - ~3
 """
 import argparse, json, os, sys
 import numpy as np
-import pandas as pd
 import lightgbm as lgb
-from io_utils import read_tsv, countries_of, write_lists
+from io_utils import read_tsv, write_lists
 from pipeline import build_country
 from features import pair_features
 from model import stage2_matrix, decode, raw2, decode_ef
@@ -40,6 +39,7 @@ def _check_ram(batch_size):
 
 
 def main():
+    """Predict the test set: blocking -> features -> both stages -> decoder, per country; write both TSVs."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--data",    required=True,  help="path to dataset/test/ folder")
     ap.add_argument("--models",  required=True,  help="directory with stage1.txt, stage2.txt, config.json")
@@ -72,7 +72,7 @@ def main():
     if conf.get("final_mode"):
         print("NOTE: models were trained in --final mode (all training data, no holdout)")
     # Expected-F0.5 decoder (fit_decoder.py / train.py write <models>/decoder.json). Absent -> the
-    # old thr/margin decoder, exactly as before. --thr/--margin overrides force the old decoder.
+    # thr/margin decoder. --thr/--margin overrides force the thr/margin decoder.
     dec = None
     if os.path.exists(f"{a.models}/decoder.json") and a.thr is None and a.margin is None:
         dec = json.load(open(f"{a.models}/decoder.json"))
@@ -151,7 +151,7 @@ def main():
 
     # ------------------------------------------------------------------ post-run summary
     total_pairs   = sum(len(v) for v in match_lists.values())
-    print(f"\n--- Run summary ---")
+    print("\n--- Run summary ---")
     print(f"S1 total entities        : {len(s1_all):,}")
     print(f"S1 with >=1 match        : {len(match_lists):,}")
     print(f"S1 empty (no match)      : {len(s1_all) - len(match_lists):,}")

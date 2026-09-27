@@ -1,3 +1,4 @@
+"""The competition metric: macro-averaged F0.5 over Source-1 entities."""
 def f05_macro(pred, truth):
     """Macro F0.5 over S1 entities. pred/truth: dict s1_id -> set(ids). empty==empty counts 1.0."""
     tot = 0.0

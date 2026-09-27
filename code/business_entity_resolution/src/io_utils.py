@@ -1,14 +1,16 @@
-import os
+"""TSV input/output helpers (all columns read as strings, IDs written exactly as given)."""
 import pandas as pd
 
 TSV = dict(sep="\t", dtype=str, keep_default_na=False, quoting=3, encoding="utf-8", encoding_errors="replace")
 
 
 def read_tsv(path, **kw):
+    """Read a challenge TSV with every column as a string (no NaN conversion, no quoting)."""
     return pd.read_csv(path, **{**TSV, **kw})
 
 
 def countries_of(path):
+    """Sorted distinct country labels of a TSV (country is an open set)."""
     return sorted(read_tsv(path, usecols=["country"]).country.unique())
 
 
