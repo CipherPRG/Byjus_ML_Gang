@@ -73,7 +73,7 @@ reproduce exactly.
     from the keys above: the normal candidates are unchanged and up to 5 *new* pairs per S1 are added.
 - **Pruning:** key groups larger than a cap (60 other-side records / 200 S1) are dropped as generic;
   per S1, the top 60 candidates by summed key weight are kept.
-- **Candidate pairs generated:** [FILL from the final predict log] on the test set (France / India / US), i.e. about 55 per Source-1 entity; each S2/S3 record is a candidate of ~9.5 S1 on average.
+- **Candidate pairs generated:** **94,604,446** on the test set (France 13.5M / India 46.2M / US 34.9M, of which 4.7M from the word-pair keys), i.e. 54.6 per Source-1 entity; each S2/S3 record is a candidate of ~9.5 S1 on average. 344 of 1,732,544 S1 entities got no candidate.
 - **How we ensured true matches were not lost:** we diagnosed every missed true pair on the training
   data (no shared key / only oversized keys / cut by top-K; `experiments/blocking_audit*.py`). Raising caps or
   top-K barely helped (India +0.6 pt recall for 2.3x candidates), so we added sharper keys instead
@@ -139,7 +139,7 @@ used to train stage 2 are out-of-fold. The public leaderboard was only used to c
 | v8 | sharper blocking keys, early stopping | 0.9532 (sparse sample) | 0.94 |
 | v9 | + expected-F0.5 decoder | 0.9554 (rival sample) | 0.945 |
 | v10 | trained with rival businesses as context | 0.9621 (rival sample) | 0.950 |
-| **v11 (final)** | + IDF / density features, EF decoder, extra word-pair candidates | **0.9642** (rival sample, before extra candidates) | [FILL] |
+| **v11 (final)** | + IDF / density features, EF decoder, extra word-pair candidates | **0.9642** (rival sample, before extra candidates) | **0.953** |
 
 Local numbers from the rival sample (`sample_v3_25`) track the leaderboard (v9: 0.955 local vs 0.945 LB);
 numbers from the older sparse sample did not.
@@ -160,7 +160,7 @@ numbers from the older sparse sample did not.
 ## 6. Conclusion
 
 A classical, fully data-driven pipeline (normalisation, targeted blocking keys, two-stage LightGBM)
-reached 0.9642 macro F0.5 on held-out entities (leaderboard [FILL]). The largest single improvement did not come from a new feature or model
+reached 0.9642 macro F0.5 on held-out entities (public leaderboard 0.953, up from 0.901 for our first model). The largest single improvement did not come from a new feature or model
 but from making training and validation look like the test: once rival businesses were kept in the
 training sample, local validation started to predict the leaderboard. Next steps would be linking
 the S2 and S3 records of the same business to each other (to recover partial matches) and blocking

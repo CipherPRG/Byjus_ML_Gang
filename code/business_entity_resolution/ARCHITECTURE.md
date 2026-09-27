@@ -276,8 +276,8 @@ competition.
 | model | trained on | changes | clean-half F0.5 (sample_v3_25) | LB |
 |---|---|---|---|---|
 | v9 | sample_v2 | v8 + EF decoder | 0.9554 | 0.945 |
-| v10 | sample_v3_25 | rival context rows, thr 0.98 / margin 0.32, 1549 / 262 trees | 0.9621 | [FILL] |
-| v11 | sample_v3_25 | v10 + feat_v3 (IDF, density), EF decoder, 1792 / 240 trees | **0.9642** (ES 0.9640; EF ES 0.9646) | [FILL] |
+| v10 | sample_v3_25 | rival context rows, thr 0.98 / margin 0.32, 1549 / 262 trees | 0.9621 | 0.950 |
+| v11 | sample_v3_25 | v10 + feat_v3 (IDF, density), EF decoder, 1792 / 240 trees | **0.9642** (ES 0.9640; EF ES 0.9646) | **0.953** (with `--keys-v3`; final submission) |
 
 **keys_v3 — extra candidates at predict time (`--keys-v3`, used for the final submission).**
 - `M` = unordered pairs among the 3 longest distinct core-name words (len ≥ 4); `L` = unordered pairs among the
