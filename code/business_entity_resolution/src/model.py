@@ -93,6 +93,69 @@ def decode_apply(first, thr, margin):
     return keep.r1.values, keep.index.values
 
 
+def best_assignment(r1, ro, p):
+    """Each S2/S3 record -> its single best S1 (same rule and tie order as decode_prep).
+    Returns (r1, ro, p) of the assigned pairs as numpy arrays."""
+    first = decode_prep(r1, ro, p)
+    return first.r1.values.astype(np.int64), first.index.values.astype(np.int64), first.p.values.astype(np.float64)
+
+
+def fit_ef_decoder(p_assigned, y_assigned, n_true_per_s1, n_found_per_s1):
+    """Fit the expected-F0.5 decoder on a labelled set (train.py's ES half only).
+    - calibration: isotonic regression p2 -> P(true match) on the assigned pairs
+      (is_unbalance makes raw p2 over-confident, so it cannot be used as a probability directly)
+    - lam: mean number of true matches per S1 that are NOT among its assigned candidates
+      (blocking misses etc.), i.e. how many unseen matches to expect.
+    Pooled over all countries: no per-country fitting, so it applies unchanged to unseen countries.
+    Returns a JSON-serialisable dict."""
+    from sklearn.isotonic import IsotonicRegression
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=1e-4, y_max=1 - 1e-4)
+    iso.fit(np.asarray(p_assigned, dtype=np.float64), np.asarray(y_assigned, dtype=np.float64))
+    lam = float(np.mean(np.asarray(n_true_per_s1) - np.asarray(n_found_per_s1))) if len(n_true_per_s1) else 0.0
+    return dict(kind="ef", cal_x=[float(v) for v in iso.X_thresholds_],
+                cal_y=[float(v) for v in iso.y_thresholds_], lam=max(lam, 0.0), beta2=0.25)
+
+
+def decode_ef_assigned(r1a, pa, dec):
+    """Expected-F0.5 decoding on already-assigned pairs (r1a, pa): per S1, keep the top-k candidates
+    (by calibrated probability q) that maximise expected F0.5 ~ (1+b2)*sum(q_1..k) / (b2*(sum q + lam) + k);
+    keep none if P(no true match) ~ prod(1-q)*exp(-lam) is higher (a correct empty prediction scores 1.0).
+    Returns a boolean keep-mask aligned with r1a."""
+    if len(r1a) == 0:
+        return np.zeros(0, dtype=bool)
+    q = np.interp(pa, dec["cal_x"], dec["cal_y"])
+    lam, b2 = dec["lam"], dec.get("beta2", 0.25)
+    order = np.lexsort((-q, r1a))                     # by S1, then q descending
+    rs, qs = r1a[order], q[order]
+    start = np.r_[True, rs[1:] != rs[:-1]]
+    gid = np.cumsum(start) - 1
+    gstart = np.flatnonzero(start)
+    k = np.arange(len(rs)) - gstart[gid] + 1
+    cs = np.cumsum(qs); base = np.r_[0.0, cs[gstart[1:] - 1]] if len(gstart) > 1 else np.zeros(1)
+    cs = cs - base[gid]
+    tot = np.bincount(gid, weights=qs) + lam
+    ef = (1 + b2) * cs / (b2 * tot[gid] + k)
+    lp0 = np.bincount(gid, weights=np.log1p(-np.minimum(qs, 1 - 1e-6)))
+    p0 = np.exp(lp0 - lam)
+    # best k per group (first occurrence of the max)
+    ng = len(gstart)
+    best_ef = np.full(ng, -1.0); np.maximum.at(best_ef, gid, ef)
+    is_best = ef >= best_ef[gid]
+    kbest = np.full(ng, np.iinfo(np.int64).max); np.minimum.at(kbest, gid, np.where(is_best, k, np.iinfo(np.int64).max))
+    kstar = np.where(best_ef > p0, kbest, 0)
+    keep_sorted = k <= kstar[gid]
+    keep = np.zeros(len(r1a), dtype=bool)
+    keep[order] = keep_sorted
+    return keep
+
+
+def decode_ef(r1, ro, p, dec):
+    """Full expected-F0.5 decode: best S1 per S2/S3 record, then decode_ef_assigned. Returns (r1, ro) kept."""
+    ra, oa, pa = best_assignment(r1, ro, p)
+    keep = decode_ef_assigned(ra, pa, dec)
+    return ra[keep], oa[keep]
+
+
 def decode(r1, ro, p, thr, margin):
     """Each S2/S3 record is assigned to its best S1 only, if p>=thr and it beats the runner-up by
     `margin`. Convenience one-shot wrapper (predict.py etc). For a thr/margin SWEEP, call

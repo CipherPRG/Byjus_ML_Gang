@@ -116,7 +116,10 @@ def main():
         t0 = time.time()
         s1, oth, cand = build_country(a.data, "train", c, cfg, a.workers)
         n1 = len(s1)
-        scored = np.fromiter((s not in excl and (not a.val_split or zlib.crc32((s + "v").encode()) % 10 < 3)
+        # only S1 with a ground-truth row are scored (sample_v3 rival S1 are context without GT rows;
+        # scoring them would count them as singletons). Full train / sample_v2: every S1 has a GT row.
+        scored = np.fromiter((s in truth and s not in excl
+                              and (not a.val_split or zlib.crc32((s + "v").encode()) % 10 < 3)
                               for s in s1.ids), dtype=bool, count=n1)
         n_true = np.zeros(n1, dtype=np.int64)
         for i, s in enumerate(s1.ids):
