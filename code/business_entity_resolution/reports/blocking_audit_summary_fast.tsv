@@ -1,0 +1,13 @@
+metric	value
+total_s1_entities	110397.0
+total_gt_pairs	382291.0
+total_recovered_pairs	362249.0
+blocking_recall	0.947573968521362
+total_candidates	2900589.0
+avg_candidates_per_s1	26.27416505883312
+zero_candidate_rate	0.0004982019438934029
+failure_A_count	2726.0
+failure_B_count	9276.0
+failure_C_count	0.0
+failure_D_count	7091.0
+failure_E_count	949.0
