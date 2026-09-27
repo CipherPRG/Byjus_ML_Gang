@@ -1,4 +1,5 @@
 """Pair features (computed in worker processes from plain string lists)."""
+import re
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from rapidfuzz import fuzz
@@ -10,7 +11,12 @@ F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "n
       "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w",
       "ajw", "alev", "alen_d", "ncontain", "akey_jac", "wcount_d",
       "a1_empty", "both_empty",
-      "hnum_edit", "hnum_logdiff"]
+      "hnum_edit", "hnum_logdiff",
+      # New features (analysis_report.md §3.2):
+      "nspan_jac",   # Jaccard over pure digit runs in each address; more robust than anum_jac
+                     # when numbers are formatted differently ("12-A" vs "12", "22 160" vs "2 160")
+      "sk_eq",       # exact match of full sorted skeleton string; tighter signal than sk_r fuzz ratio
+      ]
 
 
 def _core(n):
@@ -61,6 +67,11 @@ def _chunk(args):
         k1, k2 = set(addr_keys(t1, stop=stop)), set(addr_keys(t2, stop=stop))
         f1 = next((t for t in t1 if _hasdig(t)), None); f2 = next((t for t in t2 if _hasdig(t)), None)
         h_edit, h_gap = _hnum(t1, t2)
+        # pure digit runs for nspan_jac: "12-A" -> {"12"}, "suite3" -> {"3"}, "22 160" -> {"22","160"}
+        sp1 = set(re.findall(r'\d+', a1)); sp2 = set(re.findall(r'\d+', a2))
+        nspan_jac = _jac(sp1, sp2)
+        # sk_eq: exact match of the full sorted skeleton string passed through as sk1/sk2
+        sk_eq = float(bool(sk1) and bool(sk2) and sk1 == sk2)
         out[i] = (
             fuzz.ratio(n1, n2), fuzz.token_sort_ratio(n1, n2), fuzz.token_set_ratio(n1, n2), fuzz.partial_ratio(n1, n2),
             JaroWinkler.similarity(j1, j2), Levenshtein.normalized_similarity(j1, j2),
@@ -76,7 +87,8 @@ def _chunk(args):
             float(len(j1) >= 4 and len(j2) >= 4 and (j1 in j2 or j2 in j1)),
             _jac(k1, k2), abs(len(c1) - len(c2)) / max(len(c1), len(c2), 1),
             float(e1), float(e1 and e2),
-            h_edit, h_gap)
+            h_edit, h_gap,
+            nspan_jac, sk_eq)
     return out
 
 

@@ -22,7 +22,10 @@ def raw2(X):
 
 
 def stage2_matrix(r1, ro, p1, raw):
-    """Context features from p1: rank/gap/top competitor inside each S1 and each S2/S3 record."""
+    """Context features from p1: rank/gap/top competitor inside each S1 and each S2/S3 record.
+    Also adds n_s1_per_ro: how many distinct S1 candidates share this 'other' record.  A high
+    count means the other record is a non-specific candidate (shared address, very generic name)
+    — a proxy for the analysis_report.md §3.2 'sibling business at same address' signal."""
     d = pd.DataFrame({"r1": r1, "ro": ro, "p": p1})
     g1 = d.groupby("r1").p; go = d.groupby("ro").p
     cols = {
@@ -34,6 +37,9 @@ def stage2_matrix(r1, ro, p1, raw):
         "max_o_other": (go.transform("max")).values,
         "sum_s1": g1.transform("sum").values - p1,
         "sum_o": go.transform("sum").values - p1,
+        # how many distinct S1 entities are competing for this "other" record?
+        # high value -> non-specific address/name; the true match, if any, must beat many rivals.
+        "n_s1_per_ro": d.groupby("ro").r1.transform("nunique").values.astype(np.float32),
     }
     out = pd.DataFrame(cols)
     for j, c in enumerate(RAW2):
