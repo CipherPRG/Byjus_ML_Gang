@@ -1,4 +1,4 @@
-﻿"""Blocking audit script to measure baseline performance and identify failure modes.
+"""Blocking audit script to measure baseline performance and identify failure modes.
 Loads training data, runs existing blocking unchanged, and analyzes why true matches are missed.
 """
 
@@ -143,10 +143,19 @@ def get_pair_rank_for_s1(s1_idx, s2_idx, s1_record_keys_filtered, s2_record_keys
         if s1_key_set.intersection(s2_keys):
             candidate_s2_indices.append(idx2)
 
+    # Merge order for s1_idx is determined by key order in S1 and ascending order of candidate indices
+    s1_key_list = [kw[0] for kw in s1_record_keys_filtered[s1_idx]]
+    s2_key_dicts = {idx2: dict(s2_record_keys_filtered[idx2]) for idx2 in candidate_s2_indices}
+    appearance_order = {}
+    for k in s1_key_list:
+        for idx2 in sorted(candidate_s2_indices):
+            if idx2 not in appearance_order and k in s2_key_dicts[idx2]:
+                appearance_order[idx2] = len(appearance_order)
+
     # Compute weights for all candidate pairs
     pair_weights = []
     for idx2 in candidate_s2_indices:
-        s2_keys_weights = dict(s2_record_keys_filtered[idx2])
+        s2_keys_weights = s2_key_dicts[idx2]
         s2_key_set = set(s2_keys_weights.keys())
         shared_keys = s1_key_set.intersection(s2_key_set)
 
@@ -154,17 +163,13 @@ def get_pair_rank_for_s1(s1_idx, s2_idx, s1_record_keys_filtered, s2_record_keys
         for key in shared_keys:
             weight += s2_keys_weights.get(key, 0)
 
-        pair_weights.append((idx2, weight))
+        pair_weights.append((idx2, weight, appearance_order.get(idx2, idx2)))
 
-    # Sort by weight descending (as in candidates line 107)
-    # For tie-breaking, candidates() uses sort_values(["r1", "w"], ascending=[True, False])
-    # Since we're grouping by r1 first, within each r1 group we sort by w descending
-    # For ties in weight, pandas sort is stable, but we don't need to replicate exact tie behavior
-    # as long as we sort by weight descending
-    pair_weights.sort(key=lambda x: x[1], reverse=True)
+    # Sort by weight descending, tie-break by appearance order ascending (matches candidates() sort_values)
+    pair_weights.sort(key=lambda x: (-x[1], x[2]))
 
     # Find the rank of our specific pair
-    for rank, (idx2, weight) in enumerate(pair_weights):
+    for rank, (idx2, weight, _app) in enumerate(pair_weights):
         if idx2 == s2_idx:
             return rank + 1  # 1-based rank
 

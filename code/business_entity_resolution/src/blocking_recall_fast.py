@@ -26,7 +26,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--keys-v2", action="store_true", help="enable keys_v2")
+    ap.add_argument("--addr-stop-frac", type=float, default=None, help="address stop fraction")
+    ap.add_argument("--max-block", type=int, default=None)
+    ap.add_argument("--max-s1-block", type=int, default=None)
+    ap.add_argument("--topk", type=int, default=None)
     a = ap.parse_args()
+    if a.keys_v2:
+        CFG["keys_v2"] = True
+    if a.addr_stop_frac is not None:
+        CFG["addr_stop_frac"] = a.addr_stop_frac
+    if a.max_block is not None:
+        CFG["max_block"] = a.max_block
+    if a.max_s1_block is not None:
+        CFG["max_s1_block"] = a.max_s1_block
+    if a.topk is not None:
+        CFG["topk"] = a.topk
 
     gt = read_tsv(f"{a.data}/train_ground_truth.tsv")
     truth = {k: {m for m in v.split(",") if m}
