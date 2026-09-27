@@ -1,4 +1,0 @@
-[India] S1=44146 others=286156 pairs=1107166 (25.1/S1) blocking recall=0.9284
-[US] S1=66251 others=399811 pairs=1437909 (21.7/S1) blocking recall=0.9720
-overall blocking recall: 0.9545; pairs: 2545075
-validation macro F0.5 = 0.9668 at thr=0.70 margin=0.20  (val S1: 32931)
