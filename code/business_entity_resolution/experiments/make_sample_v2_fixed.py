@@ -26,6 +26,8 @@ python src/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2_in
 Then train with:
   python src/train.py --data ../../sample_v2 --models ../../models_v7 --workers 8 --addr-stop-frac 0.01
 """
+import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 
 import argparse
 import os

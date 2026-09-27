@@ -1,5 +1,10 @@
-numpy>=1.24
-pandas>=2.0
-lightgbm>=4.0
-rapidfuzz>=3.0
-scikit-learn>=1.3
+# Exact versions used to train and predict the submitted model (Python 3.12.0, Windows 11, 16 GB RAM).
+numpy==1.26.4
+pandas==2.2.2
+lightgbm==4.7.0
+rapidfuzz==3.14.6
+scikit-learn==1.5.2
+scipy==1.17.1
+joblib==1.5.3
+threadpoolctl==3.6.0
+psutil==7.2.2

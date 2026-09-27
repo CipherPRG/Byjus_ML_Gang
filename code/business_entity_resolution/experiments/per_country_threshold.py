@@ -13,6 +13,8 @@ Whatever wins, you copy the values into train.py/predict.py yourself.
 Usage:
     python src/per_country_threshold.py --data ../../sample_dense --workers 5
 """
+import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 import argparse, zlib
 import numpy as np
 from io_utils import read_tsv, countries_of

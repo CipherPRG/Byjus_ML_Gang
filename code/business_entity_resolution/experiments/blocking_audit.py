@@ -1,6 +1,8 @@
-﻿"""Blocking audit script to measure baseline performance and identify failure modes.
+"""Blocking audit script to measure baseline performance and identify failure modes.
 Loads training data, runs existing blocking unchanged, and analyzes why true matches are missed.
 """
+import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 
 import pandas as pd
 import numpy as np

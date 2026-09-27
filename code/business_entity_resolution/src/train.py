@@ -289,7 +289,7 @@ def main():
         rep_f05 = f05_macro({k: v for k, v in pred_all.items() if k in rep_ids}, rt)
         all_f05 = f05_macro(pred_all, at)
         print(f"CLEAN report-half macro F0.5 = {rep_f05:.4f}  (REP S1: {len(rt)})  <- honest number")
-        print(f"full-val macro F0.5          = {all_f05:.4f}  (val S1: {len(at)})  <- compare to v7 0.9452")
+        print(f"full-val macro F0.5          = {all_f05:.4f}  (val S1: {len(at)})")
 
         # ---- expected-F0.5 decoder: fitted on the ES half only, kept only if it beats thr on ES
         ra, oa, pa = best_assignment(r1, ro, p2)

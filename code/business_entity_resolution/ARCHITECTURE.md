@@ -41,7 +41,7 @@ scripts below) instead of the full 2.2M-entity train set.
 samples by name hash, which keeps an S1 and its true matches together but thins out the
 *different-name* neighbours ~20x - so blocking and hard negatives are far easier than on
 the real test set, and local val over-promised (v6: 0.973 on sample_dense vs 0.901 LB).
-`sample_v2` (built by `src/make_sample_v2_fixed.py`) takes 5% of S1 entities and keeps
+`sample_v2` (built by `experiments/make_sample_v2_fixed.py`) takes 5% of S1 entities and keeps
 ALL their real full-train blocking candidates, so candidate density matches the real
 data (110,784 S1; 1,954,070 S2; 1,870,057 S3). The fixed script drops competitor S1s
 that have no ground-truth row (Aayush's original labelled them wrongly).
@@ -150,18 +150,16 @@ with a loss breakdown (blocking vs model FN, FP, singletons), thr/margin sweep,
 / capped / top-K cut), prints examples and a caps/top-K recall-vs-cost sweep;
 `--kv2` to test keys_v2.
 
-**`predict.py`** (and Track D's hardened `predict_ajusbyjus.py`, currently only on
-`origin/ajus-byjus`) — loads `config.json`+`stage1.txt`+`stage2.txt`, runs
-`build_country`→`pair_features`→`stage2_matrix`→`decode` per test country, batches
-stage-1 inference (default 2M pairs/batch) to bound RAM, writes both output TSVs.
-Track D's hardened version adds: `psutil` RAM warning, configurable `--batch`,
-France/unseen-country sanity check (warns if an expected-unseen country is missing from
-test S1, or produces zero matches despite having candidates), per-batch progress, and a
-final run-summary block.
+**`predict.py`** — loads `config.json` + `stage1.txt` + `stage2.txt` (+ `decoder.json` if present), runs
+`build_country` → `pair_features` → `stage2_matrix` → decoder per test country, batches stage-1 inference
+(default 2M pairs/batch) to bound RAM, and writes both output TSVs plus `scores_<country>.npz`. Prints a RAM
+warning, per-batch progress, a warning for ANY country that gets 0 matches despite candidates, and a run
+summary. `--keys-v3` adds the extra name-/address-word-pair candidates (§8). (This was `predict_ajusbyjus.py`
+during development; renamed in the final clean-up, code unchanged except log messages - outputs byte-identical.)
 
-**`make_sample.py`** — builds `sample_dense/` from `dataset/train/`.
+**`experiments/`** — one-off analysis scripts kept for transparency, NOT needed to reproduce the submission: `make_sample.py` (sample_dense), `make_sample_v2_fixed.py` (sample_v2), `model_bench.py`, `per_country_threshold.py`, `cross_source_experiment.py`, `check_*_importance.py`, `blocking_audit*.py`, `blocking_recall_fast.py`. They import the pipeline from `../src`.
 
-**Track B experiment scripts (this session, `pathu` branch):**
+**Experiment scripts (now in `experiments/`):**
 - `model_bench.py` — pluggable model registry; benchmarked 8 model families through the
   identical OOF+stage2+decode pipeline. LightGBM won outright (0.9674) — closes the
   "which classifier" question.
@@ -233,19 +231,9 @@ same content either way, just a different path.
 - Predict RAM: v8 peaks high on the full test set (India ≈ 43.6M candidate pairs). Run
   it alone, with other apps closed; the laptop may use the page file.
 
-## 6. Reproduction (see also `README.md`)
+## 6. Reproduction
 
-```
-pip install -r code/business_entity_resolution/requirements.txt
-python code/business_entity_resolution/src/make_sample_v2_fixed.py --data dataset/train --out sample_v2 --frac 0.05 --addr-stop-frac 0.01
-cd code/business_entity_resolution
-python src/train.py --data ../../sample_v2 --models ../../models_v8 --workers 10 --addr-stop-frac 0.01 --keys-v2
-python src/predict_ajusbyjus.py --data ../../dataset/test --models ../../models_v8 --out ../../output_v8 --workers 10
-cd ../..
-python utils/validate_submission.py --matching output_v8/matching_results.tsv --candidate output_v8/candidate_pairs.tsv --test-dir dataset/test
-```
-(v8 run times on the team laptop: train ≈ 25 min, predict several hours on the full
-test set.)
+See `README.md` for the exact commands that produce the submitted files and `tests/` for the unit tests.
 
 ## 8. Changes after v8 (v9 – v11, 27 Sep)
 
@@ -267,7 +255,7 @@ competition.
 - **Expected-F0.5 decoder** (`model.fit_ef_decoder` / `decode_ef_assigned`, `fit_decoder.py`):
   isotonic calibration of p2 + lambda (expected unseen matches per S1), fitted on the ES half; per S1
   keeps the top-k (k = 0 allowed) that maximises expected F0.5. Saved as `<models>/decoder.json`
-  only if it beats thr/margin on ES; `predict_ajusbyjus.py` uses it when present. Used by v9
+  only if it beats thr/margin on ES; `predict.py` uses it when present. Used by v9
   (+0.1 local, +0.5 LB); v10 did not need it (thr/margin was better on ES).
 - **feat_v3** (`--feat-v3`, default off; `F1_V3` = 42 features): `nspan_jac` (digit-run Jaccard),
   `sk_eq` (exact skeleton equality), IDF-weighted name/address similarity `n_idf_cos`, `n_idf_max`,
@@ -289,4 +277,21 @@ competition.
 |---|---|---|---|---|
 | v9 | sample_v2 | v8 + EF decoder | 0.9554 | 0.945 |
 | v10 | sample_v3_25 | rival context rows, thr 0.98 / margin 0.32, 1549 / 262 trees | 0.9621 | [FILL] |
-| v11 | sample_v3_25 | v10 + feat_v3 (IDF, density) | [FILL] | [FILL] |
+| v11 | sample_v3_25 | v10 + feat_v3 (IDF, density), EF decoder, 1792 / 240 trees | **0.9642** (ES 0.9640; EF ES 0.9646) | [FILL] |
+
+**keys_v3 — extra candidates at predict time (`--keys-v3`, used for the final submission).**
+- `M` = unordered pairs among the 3 longest distinct core-name words (len ≥ 4); `L` = unordered pairs among the
+  4 longest non-generic address words (len ≥ 5). A word PAIR is much sharper than one word (so it survives the
+  block caps), and several pairs per record survive one extra / missing / typo'd word; `M` works when the
+  address is empty — the two biggest blocking-miss types we measured.
+- Kept in separate key arrays: the normal candidates and their weights are untouched (tested byte-identical);
+  up to `--keys-v3-topk` (default 5) NEW pairs per S1 are appended. Nothing is learned from labels; the same
+  rule applies to every country.
+- It is applied at predict time only (the training sample stores its candidate pairs), so it was validated
+  separately on labelled data that re-blocks (`sample_v2`, v11, its own decoder, held-out entities only):
+  blocking recall 0.954 → 0.964; ES 0.9302 → 0.9325, REP 0.9310 → 0.9336, better in India and US. On the
+  small sample with a flags-off model: ES 0.9809 → 0.9813, REP 0.9817 → 0.9823. It costs ~5% more candidates.
+
+**Final clean-up.** One-off scripts moved to `experiments/`; `predict_ajusbyjus.py` → `predict.py`; no country
+name appears in the pipeline code except the normalisation dictionaries; `tests/` added (20 fast unit tests);
+`requirements.txt` pinned to the exact versions used.

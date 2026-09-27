@@ -10,6 +10,8 @@ Usage (same data/workers args as train.py):
     python src/model_bench.py --data ../../sample_dense --workers 5
     python src/model_bench.py --data ../../sample_dense --workers 5 --candidates logreg,rf200,current
 """
+import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 import argparse, time, zlib
 import numpy as np
 import pandas as pd

@@ -23,6 +23,8 @@ Every filtering rule, failure-mode classification (A/B/C/D/E), and report column
 copied over unchanged from the original - only the algorithmic complexity changed, not
 the definitions or the numbers they produce.
 """
+import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 import argparse
 import os
 from collections import Counter, defaultdict

@@ -1,21 +1,18 @@
-"""Full-scale evaluation on the labelled TRAIN set, run exactly like predict.py runs on test.
+"""Evaluate a trained model on any LABELLED data folder, run exactly like predict.py runs on test.
 
-Why: every validation number so far came from sample_dense (~1/20 of the data). The leaderboard
-(86.5) sits ~10 points below our sample_dense val F0.5 (0.967), and local gains don't move it.
-This runs the real pipeline at real density on dataset/train (which has ground truth), scores it
-with the competition metric, and breaks the lost points down into:
+Runs the real pipeline (blocking -> features -> both stages -> decoder), scores it with the competition
+metric (macro F0.5 per Source-1 entity), and breaks the lost points down into:
   - blocking misses   (true match never became a candidate)
-  - model rejections  (true match was a candidate, decode did not keep it)
+  - model rejections  (true match was a candidate, the decoder did not keep it)
   - false positives   (kept a pair that is not a true match)
-S1 entities that appear in sample_dense (the model's own training data) are excluded from the
-score to avoid leakage (they still take part in blocking/decoding, as they would on test).
-
-Also sweeps thr/margin on the full-scale scores (the sample_dense optimum may not transfer),
-and caches per-country arrays to --cache so follow-up analyses don't need a full re-run.
+--val-split scores only train.py's held-out validation entities, so two models trained on the same
+data folder can be compared fairly. The thr/margin sweep printed at the end is for DIAGNOSIS only:
+it is tuned on the same entities it scores, so it is optimistic and is never used to pick settings.
+--cache saves per-country arrays for follow-up analysis.
 
 Usage (from code/business_entity_resolution):
-    python -u src/eval_full.py --data ../../dataset/train --models ../../models_v3 \
-        --exclude ../../sample_dense/train_source1.tsv --cache ../../eval_cache --workers 8
+    python src/eval_full.py --data ../../sample_v3_25 --models ../../models_v11 --val-split \
+        --density-src ../../dataset/train/train_source1.tsv --cache ../../eval_cache_v11 --workers 10
 """
 import argparse, json, os, pickle, time, zlib
 import numpy as np
@@ -230,7 +227,7 @@ def main():
             if sc > best[0]:
                 best = (sc, float(t_), float(m_))
     print(f"full-scale optimum: F0.5={best[0]:.4f} at thr={best[1]:.2f} margin={best[2]:.2f}  "
-          f"(vs {base:.4f} at the sample_dense-tuned thr={thr:.2f} margin={margin:.2f})", flush=True)
+          f"(vs {base:.4f} at the model's own thr={thr:.2f} margin={margin:.2f}; diagnosis only)", flush=True)
     if (best[1], best[2]) != (float(thr), float(margin)):
         npd, tpp = assemble(best[1], best[2])
         breakdown(f"ALL COUNTRIES @ full-scale optimum thr={best[1]:.2f} margin={best[2]:.2f}",

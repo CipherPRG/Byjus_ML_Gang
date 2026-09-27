@@ -105,7 +105,7 @@ def learn_legal_sk(names, min_end_frac=0.005, max_len=10):
       4. Union with the hard-coded LEGAL_SK so existing coverage is never lost.
 
     Returns a frozenset of skeleton strings (superset of LEGAL_SK).
-    Prints the newly learned tokens so Pratham can audit them.
+    Prints the newly learned tokens so they can be audited.
     """
     from collections import Counter
     total = 0
