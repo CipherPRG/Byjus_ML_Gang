@@ -1,16 +1,26 @@
 """Pair features (computed in worker processes from plain string lists)."""
+import re
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from rapidfuzz import fuzz
 from rapidfuzz.distance import JaroWinkler, Levenshtein
 from norm import LEGAL, addr_keys
 
+# Base feature list (36): flag-off path.  Must stay identical to v8/v9 so old model files load cleanly.
 F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "nlen_d", "nfirst_eq", "ncomp",
       "ar", "asort", "aset", "apart", "ajac", "anum_jac", "anum_eq", "a2_empty",
       "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w",
       "ajw", "alev", "alen_d", "ncontain", "akey_jac", "wcount_d",
       "a1_empty", "both_empty",
       "hnum_edit", "hnum_logdiff"]
+
+# Extended feature list (38): feat_v3=True only.  Two new features appended at the end so that
+# F1[:36] == F1_V3[:36] and existing RAW2 index lookups are unaffected.
+F1_V3 = F1 + [
+    "nspan_jac",  # Jaccard over pure digit runs in each address; more robust than anum_jac for
+                  # mixed-format numbers like "12-A" vs "12" (anum_jac=0, nspan_jac=1.0)
+    "sk_eq",      # exact match of the full sorted skeleton string; tighter than sk_r fuzz ratio
+]
 
 
 def _core(n):
@@ -49,8 +59,9 @@ def _hnum(t1, t2):
 
 
 def _chunk(args):
-    n1s, a1s, n2s, a2s, k1s, k2s, ws, stop = args
-    out = np.zeros((len(n1s), len(F1)), dtype=np.float32)
+    n1s, a1s, n2s, a2s, k1s, k2s, ws, stop, feat_v3 = args
+    ncols = len(F1_V3) if feat_v3 else len(F1)
+    out = np.zeros((len(n1s), ncols), dtype=np.float32)
     for i, (n1, a1, n2, a2, sk1, sk2, w) in enumerate(zip(n1s, a1s, n2s, a2s, k1s, k2s, ws)):
         c1, c2 = _core(n1), _core(n2)
         j1, j2 = " ".join(c1), " ".join(c2)
@@ -61,7 +72,8 @@ def _chunk(args):
         k1, k2 = set(addr_keys(t1, stop=stop)), set(addr_keys(t2, stop=stop))
         f1 = next((t for t in t1 if _hasdig(t)), None); f2 = next((t for t in t2 if _hasdig(t)), None)
         h_edit, h_gap = _hnum(t1, t2)
-        out[i] = (
+        # Base 36 features — identical to v8/v9 flag-off path
+        base = (
             fuzz.ratio(n1, n2), fuzz.token_sort_ratio(n1, n2), fuzz.token_set_ratio(n1, n2), fuzz.partial_ratio(n1, n2),
             JaroWinkler.similarity(j1, j2), Levenshtein.normalized_similarity(j1, j2),
             float(sorted(c1) == sorted(c2)), _jac(c1, c2), abs(len(j1) - len(j2)) / max(len(j1), len(j2), 1),
@@ -77,21 +89,32 @@ def _chunk(args):
             _jac(k1, k2), abs(len(c1) - len(c2)) / max(len(c1), len(c2), 1),
             float(e1), float(e1 and e2),
             h_edit, h_gap)
+        if feat_v3:
+            # Two extra features appended — only computed / stored when feat_v3=True
+            sp1 = set(re.findall(r'\d+', a1)); sp2 = set(re.findall(r'\d+', a2))
+            nspan_jac = _jac(sp1, sp2)
+            sk_eq = float(bool(sk1) and bool(sk2) and sk1 == sk2)
+            out[i] = base + (nspan_jac, sk_eq)
+        else:
+            out[i] = base
     return out
 
 
-def pair_features(s1, oth, r1, ro, w, workers=1, chunk=20000):
-    """Feature matrix (len(r1) x len(F1)) float32 for pairs (S1 row r1, other row ro)."""
+def pair_features(s1, oth, r1, ro, w, workers=1, chunk=20000, feat_v3=False):
+    """Feature matrix float32 for pairs (S1 row r1, other row ro).
+    feat_v3=False (default): shape (N, 36), identical to v8/v9.
+    feat_v3=True:            shape (N, 38), appends nspan_jac and sk_eq."""
     stop = getattr(s1, "stop", frozenset())  # per-country generic address words, same set blocking used
     jobs = []
     for s in range(0, len(r1), chunk):
         a, b = r1[s:s + chunk], ro[s:s + chunk]
         jobs.append(([s1.nclean[i] for i in a], [s1.aclean[i] for i in a],
                      [oth.nclean[i] for i in b], [oth.aclean[i] for i in b],
-                     [s1.nskel[i] for i in a], [oth.nskel[i] for i in b], w[s:s + chunk], stop))
+                     [s1.nskel[i] for i in a], [oth.nskel[i] for i in b], w[s:s + chunk], stop, feat_v3))
     if workers > 1 and len(jobs) > 1:
         with ProcessPoolExecutor(workers) as ex:
             res = list(ex.map(_chunk, jobs))
     else:
         res = [_chunk(j) for j in jobs]
-    return np.vstack(res) if res else np.zeros((0, len(F1)), dtype=np.float32)
+    ncols = len(F1_V3) if feat_v3 else len(F1)
+    return np.vstack(res) if res else np.zeros((0, ncols), dtype=np.float32)

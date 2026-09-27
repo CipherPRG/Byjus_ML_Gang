@@ -87,6 +87,44 @@ def translit(s: str) -> str:
 
 
 LEGAL_SK = {"prvt", "lmtd", "lmt", "pr", "l", "prl", "ltd", "llp", "kmpn", "kp", "prvtl", "lmtdd"}
+
+
+def learn_legal_sk(names, min_end_frac=0.005, max_len=10):
+    """Data-driven legal suffix learner (feat_v3 only, never called when feat_v3 is off).
+
+    Scans all S1 business_name values for the country and finds token skeletons that
+    appear at the END of a name more than `min_end_frac` of the time.  Learned entirely
+    from the data — no language-specific lists, so it works for any unseen country.
+
+    Algorithm:
+      1. Normalise every name through norm_name().
+      2. Count each token skeleton that appears as the LAST token of any name.
+      3. Keep skeletons whose end-of-name frequency >= min_end_frac * total_names AND
+         whose token length <= max_len (avoids picking up real short words like "the").
+      4. Union with the hard-coded LEGAL_SK so existing coverage is never lost.
+
+    Returns a frozenset of skeleton strings (superset of LEGAL_SK).
+    Prints the newly learned tokens so Pratham can audit them.
+    """
+    from collections import Counter
+    total = 0
+    end_cnt = Counter()
+    for nm in names:
+        _, core = norm_name(nm)
+        if not core:
+            continue
+        total += 1
+        sk = skel(core[-1])
+        if sk and len(sk) <= max_len:
+            end_cnt[sk] += 1
+    threshold = max(2, int(min_end_frac * total))
+    new_sk = frozenset(s for s, c in end_cnt.items() if c >= threshold) - LEGAL_SK
+    if new_sk:
+        print(f"  [feat_v3] learn_legal_sk: {total:,} names, threshold={threshold} "
+              f"-> {len(new_sk)} new suffix skeletons: {sorted(new_sk)}")
+    else:
+        print(f"  [feat_v3] learn_legal_sk: {total:,} names, threshold={threshold} -> no new skeletons beyond LEGAL_SK")
+    return LEGAL_SK | new_sk
 _SKR = [("ph", "f"), ("kh", "k"), ("gh", "g"), ("bh", "b"), ("dh", "d"), ("th", "t"), ("jh", "j"), ("sh", "s"),
         ("ch", "k"), ("ck", "k"), ("qu", "k"), ("x", "ks"), ("c", "k"), ("q", "k"), ("w", "v"), ("z", "j"), ("g", "j")]
 
@@ -103,14 +141,17 @@ def strip_accents(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
 
-def norm_name(s: str):
-    """returns (clean string, core tokens list without legal suffixes)"""
+def norm_name(s: str, extra_legal_sk: frozenset = frozenset()):
+    """returns (clean string, core tokens list without legal suffixes).
+    extra_legal_sk: additional skeleton strings to treat as legal suffixes (feat_v3 only).
+    When empty (the default, used by all existing call sites), behaviour is identical to before."""
     if any(c >= "ऀ" for c in s):
         s = translit(s)
     s = strip_accents(s).lower().replace("&", " and ").replace("'", "").replace(".", "")
     s = _SPACE.sub(" ", _NONWORD.sub(" ", s)).strip()
     toks = s.split()
-    core = [t for t in toks if t not in LEGAL and skel(t) not in LEGAL_SK] or toks
+    _lsk = LEGAL_SK | extra_legal_sk
+    core = [t for t in toks if t not in LEGAL and skel(t) not in _lsk] or toks
     return " ".join(toks), core
 
 

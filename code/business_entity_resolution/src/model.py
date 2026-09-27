@@ -21,8 +21,20 @@ def raw2(X):
     return X[:, [F1.index(c) for c in RAW2]].astype(np.float32)
 
 
-def stage2_matrix(r1, ro, p1, raw):
-    """Context features from p1: rank/gap/top competitor inside each S1 and each S2/S3 record."""
+def stage2_matrix(r1, ro, p1, raw, density=None):
+    """Context features from p1: rank/gap/top competitor inside each S1 and each S2/S3 record.
+
+    density (feat_v3 only, default None): dict with keys 'addr' and 'name', each mapping a
+    normalised string -> count in the FULL source1 file (train_source1 at training time,
+    test_source1 at predict time — NOT counts inside the sample).  When None, the function
+    produces exactly 19 columns, identical to v8/v9.  When provided, two extra columns are
+    appended (21 total):
+      log1p_addr_density: log1p(count of S1 entities sharing this 'other' record's norm address)
+      log1p_name_density: log1p(count of S1 entities sharing this 'other' record's norm name core)
+    High density = non-specific address/name (sibling businesses at the same location).
+    Both are properties of the 'other' (S2/S3) record indexed by ro; they are passed in via
+    the `density` dict rather than being broadcast inside stage2_matrix to keep the RAM cost
+    outside the function (density dicts are built once per country before the loop)."""
     d = pd.DataFrame({"r1": r1, "ro": ro, "p": p1})
     g1 = d.groupby("r1").p; go = d.groupby("ro").p
     cols = {
@@ -38,6 +50,10 @@ def stage2_matrix(r1, ro, p1, raw):
     out = pd.DataFrame(cols)
     for j, c in enumerate(RAW2):
         out[c] = raw[:, j]
+    if density is not None:
+        # ro indexes into the 'other' (S2/S3) Side; density arrays are pre-built per-ro outside
+        out["log1p_addr_density"] = np.log1p(density["addr_by_ro"]).astype(np.float32)
+        out["log1p_name_density"] = np.log1p(density["name_by_ro"]).astype(np.float32)
     return out.astype(np.float32)
 
 

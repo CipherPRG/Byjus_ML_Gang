@@ -96,14 +96,15 @@ def h64(k):
 class Side:
     """Normalised records of one source (one country): ids, clean name/address, blocking keys."""
 
-    def __init__(self, df, stop=frozenset(), kv2=False):
+    def __init__(self, df, stop=frozenset(), kv2=False, extra_legal_sk=frozenset()):
         self.stop = stop  # per-country generic address words (norm.generic_addr_tokens); empty = off
         self.kv2 = kv2    # keys_v2 blocking keys + ordinal normalisation (cfg keys_v2); False = v7 behaviour
+        self.extra_legal_sk = extra_legal_sk  # feat_v3: extra learned suffix skeletons; frozenset() = off
         self.ids = df.entity_id.tolist()
         self.nclean, self.aclean, self.nskel = [], [], []
         key, row, w = [], [], []
         for i, (nm, ad, c) in enumerate(zip(df.business_name.values, df.business_address.values, df.country.values)):
-            nc, core = norm_name(nm)
+            nc, core = norm_name(nm, extra_legal_sk)
             ac, at = norm_addr(ad, ords=kv2)
             self.nclean.append(nc)
             self.nskel.append(" ".join(x for x in (skel(t) for t in core) if x))
@@ -122,6 +123,7 @@ class Side:
         out = Side.__new__(Side)
         out.stop = sides[0].stop if sides else frozenset()
         out.kv2 = sides[0].kv2 if sides else False
+        out.extra_legal_sk = sides[0].extra_legal_sk if sides else frozenset()
         out.ids, out.nclean, out.aclean, out.nskel = [], [], [], []
         keys, rows, ws = [], [], []
         off = 0
