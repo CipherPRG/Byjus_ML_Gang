@@ -118,7 +118,8 @@ def main():
         raw = []
         for s in range(0, len(r1), B):
             end = min(s + B, len(r1))
-            X   = pair_features(s1, oth, r1[s:end], ro[s:end], w[s:end], a.workers)
+            X   = pair_features(s1, oth, r1[s:end], ro[s:end], w[s:end], a.workers,
+                                feat_v3=bool(cfg.get("feat_v3")))
             p1[s:end] = b1.predict(X)
             raw.append(raw2(X))
             # Progress ticker - useful to confirm it's not stuck on large countries
@@ -127,7 +128,9 @@ def main():
                       f"({end:,}/{len(r1):,} pairs)")
 
         raw = np.vstack(raw)
-        X2  = stage2_matrix(r1, ro, p1, raw); del raw
+        dens = ({"addr_by_ro": oth.dens_addr[ro], "name_by_ro": oth.dens_name[ro]}
+                if cfg.get("feat_v3") else None)   # counted in this test folder's full source1
+        X2  = stage2_matrix(r1, ro, p1, raw, density=dens); del raw, dens
         p2  = b2.predict(X2); del X2
 
         rr, oo = decode_ef(r1, ro, p2, dec) if dec is not None else decode(r1, ro, p2, thr, margin)

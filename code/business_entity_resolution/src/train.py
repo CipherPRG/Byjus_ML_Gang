@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from io_utils import read_tsv, countries_of
 from pipeline import build_country
-from features import pair_features, F1
+from features import pair_features, F1, F1_V3
 from model import fit_stage1, fit_stage2, stage2_matrix, decode, decode_prep, decode_apply, raw2
 from model import best_assignment, fit_ef_decoder, decode_ef_assigned
 from evaluate import f05_macro
@@ -48,7 +48,19 @@ def main():
     ap.add_argument("--keys-v2", action="store_true",
                     help="extra blocking keys (address number bigrams, number x rare word, compact/website "
                          "names) + ordinal normalisation. Saved into config.json so predict matches.")
+    ap.add_argument("--feat-v3", action="store_true",
+                    help="2 extra pair features (nspan_jac, sk_eq) + 2 stage-2 density features (how many S1 share "
+                         "this record's address / name, from the FULL S1 file). Saved in config.json.")
+    ap.add_argument("--learn-suffix", action="store_true",
+                    help="strip legal suffixes learned from S1 names (norm.learn_legal_sk). Saved in config.json.")
+    ap.add_argument("--density-src", default=None,
+                    help="FULL train_source1.tsv for the feat_v3 density counts when --data is a sample "
+                         "(e.g. ../../dataset/train/train_source1.tsv). Default: the --data folder's own source1.")
     a = ap.parse_args()
+    if a.feat_v3:
+        CFG["feat_v3"] = True
+    if a.learn_suffix:
+        CFG["learn_suffix"] = True
     if a.addr_stop_frac is not None:
         CFG["addr_stop_frac"] = a.addr_stop_frac
     if a.keys_v2:
@@ -72,10 +84,13 @@ def main():
     # (like predict) and only their stage-1 scores + RAW2 columns are used. No context rows -> old behaviour.
     X, Y, S1ID, OID = [], [], [], []
     C_S1, C_O, C_FILES = [], [], []
+    FV3 = bool(CFG.get("feat_v3"))
+    DA, DN, CDA, CDN = [], [], [], []   # feat_v3 density per row (labelled / context)
+    NF = len(F1_V3) if FV3 else len(F1)
     ctx_dir = os.path.join(a.models, "_ctx_tmp")
     n_true = n_found = 0
     for c in countries_of(f"{a.data}/train_source1.tsv"):
-        s1, oth, cand = build_country(a.data, "train", c, CFG, a.workers)
+        s1, oth, cand = build_country(a.data, "train", c, CFG, a.workers, density_src=a.density_src)
         if cand is None:
             continue
         r1, ro, w = cand.r1.values, cand.ro.values, cand.w.values
@@ -83,7 +98,10 @@ def main():
         s1ids = np.array(s1.ids, dtype=object)[r1]
         oids  = np.array(oth.ids, dtype=object)[ro]
         lab = np.fromiter((s in truth for s in s1ids), dtype=bool, count=len(r1))
-        feats = pair_features(s1, oth, r1[lab], ro[lab], w[lab], a.workers)
+        feats = pair_features(s1, oth, r1[lab], ro[lab], w[lab], a.workers, feat_v3=FV3)
+        if FV3:
+            DA.append(oth.dens_addr[ro[lab]]); DN.append(oth.dens_name[ro[lab]])
+            CDA.append(oth.dens_addr[ro[~lab]]); CDN.append(oth.dens_name[ro[~lab]])
         y = np.fromiter(
             (o in truth[s] for s, o in zip(s1ids[lab], oids[lab])),
             dtype=np.int8, count=int(lab.sum())
@@ -99,11 +117,11 @@ def main():
             os.makedirs(ctx_dir, exist_ok=True)
             idx = np.flatnonzero(~lab)
             fn = os.path.join(ctx_dir, f"{c}.npy")
-            mm = np.lib.format.open_memmap(fn, mode="w+", dtype=np.float32, shape=(len(idx), len(F1)))
+            mm = np.lib.format.open_memmap(fn, mode="w+", dtype=np.float32, shape=(len(idx), NF))
             B = 2_000_000
             for s in range(0, len(idx), B):
                 j = idx[s:s + B]
-                mm[s:s + len(j)] = pair_features(s1, oth, r1[j], ro[j], w[j], a.workers)
+                mm[s:s + len(j)] = pair_features(s1, oth, r1[j], ro[j], w[j], a.workers, feat_v3=FV3)
                 print(f"  [{c}] rival-context features {min(s + B, len(idx)):,}/{len(idx):,}", flush=True)
             mm.flush(); del mm
             C_S1.append(s1ids[~lab]); C_O.append(oids[~lab]); C_FILES.append(fn)
@@ -196,7 +214,11 @@ def main():
         print(f"rival context scored: {nC:,} pairs", flush=True)
 
     # ------------------------------------------------------------------ stage 2
-    X2 = stage2_matrix(r1, ro, p1, np.vstack(raw_parts)); del raw_parts
+    dens = None
+    if FV3:   # row order: labelled rows of every country, then context rows of every country
+        dens = {"addr_by_ro": np.concatenate(DA + CDA), "name_by_ro": np.concatenate(DN + CDN)}
+        del DA, DN, CDA, CDN
+    X2 = stage2_matrix(r1, ro, p1, np.vstack(raw_parts), density=dens); del raw_parts, dens
     if a.final:
         m2 = fit_stage2(X2[labm], Y[labm])
     else:

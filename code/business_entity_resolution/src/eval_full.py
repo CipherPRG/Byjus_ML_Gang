@@ -94,6 +94,8 @@ def main():
     ap.add_argument("--val-split", action="store_true",
                     help="score only train.py's held-out validation entities (crc32(id+'v')%%10<3), so a model "
                          "trained on this --data folder can be compared fairly against another model")
+    ap.add_argument("--density-src", default=None,
+                    help="feat_v3 models only: FULL train_source1.tsv for density counts when --data is a sample")
     a = ap.parse_args()
 
     conf = json.load(open(f"{a.models}/config.json"))
@@ -114,7 +116,7 @@ def main():
     G = []
     for c in countries:
         t0 = time.time()
-        s1, oth, cand = build_country(a.data, "train", c, cfg, a.workers)
+        s1, oth, cand = build_country(a.data, "train", c, cfg, a.workers, density_src=a.density_src)
         n1 = len(s1)
         # only S1 with a ground-truth row are scored (sample_v3 rival S1 are context without GT rows;
         # scoring them would count them as singletons). Full train / sample_v2: every S1 has a GT row.
@@ -161,13 +163,16 @@ def main():
         raw = []
         for s in range(0, len(r1), B):
             e = min(s + B, len(r1))
-            X = pair_features(s1, oth, r1[s:e], ro[s:e], w[s:e], a.workers)
+            X = pair_features(s1, oth, r1[s:e], ro[s:e], w[s:e], a.workers, feat_v3=bool(cfg.get("feat_v3")))
             p1[s:e] = b1.predict(X)
             raw.append(raw2(X))
             del X
             print(f"  [{c}] stage-1 {e:,}/{len(r1):,}  ({time.time() - t0:.0f}s)", flush=True)
         raw = np.vstack(raw)
-        X2 = stage2_matrix(r1, ro, p1, raw)
+        dens = ({"addr_by_ro": oth.dens_addr[ro], "name_by_ro": oth.dens_name[ro]}
+                if cfg.get("feat_v3") else None)
+        X2 = stage2_matrix(r1, ro, p1, raw, density=dens)
+        del dens
         del raw
         p2 = b2.predict(X2).astype(np.float32)
         del X2
