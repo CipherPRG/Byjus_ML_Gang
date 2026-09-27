@@ -168,6 +168,33 @@ keys for records with empty addresses.
 
 ---
 
+## 7. Compute and Hardware Constraints
+
+Everything — building the training sample, training, evaluation and prediction on the full test set — ran on
+**one student laptop**; no cloud machine, cluster or GPU was used. These limits shaped several design choices,
+and the results above are the best we could reach within them:
+
+| Resource | What we had | How it constrained the solution |
+|---|---|---|
+| RAM | **16 GB, single-channel** (≈ 7–11 GB free in practice) | the rival-aware training sample could only hold **2.5% of Source-1 entities** (~41M candidate pairs); the 5% sample (~65M pairs) did not fit |
+| CPU | laptop CPU, 10 worker processes | full predict ≈ 85 min, training ≈ 55 min, sample build ≈ 1 h — at most one heavy job at a time |
+| GPU | not used | LightGBM on CPU; no deep models or sentence embeddings (RAM and time) |
+| Time | 3-day challenge window | each idea had to be validated on small samples first; only a handful of full-scale runs were possible |
+
+**Engineering done to fit the hardware (all output-identical):**
+- stage-1 features and scoring in **2M-pair batches**, so peak RAM does not grow with the test size (95M pairs);
+- features of the ~38M rival-context training pairs written to a **disk memory-map** instead of RAM;
+- every country processed **separately** (blocking, features and decoding never hold all countries at once);
+- **per-record caching** of normalised names/addresses, phonetic skeletons and digit checks (~25–30% faster);
+- a compact `float32` feature matrix and only 11 raw features carried into stage 2.
+
+**What more hardware would most likely add** (not tested, so not claimed): training on the 5% or a larger
+rival-aware sample (on the small sample, halving the training data cost ~0.1 points: 0.9825 → 0.9813, so more data helps); sentence-embedding
+features; a seed/model ensemble; and linking the S2 and S3 records of the same business to each other, which
+targets the largest remaining loss (partial matches).
+
+---
+
 ## Appendix
 
 ### A. Code Artefacts

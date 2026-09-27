@@ -5,7 +5,7 @@ lightgbm, scikit-learn). No external data, APIs, lookups or pretrained models: e
 provided training data. `country` is treated as an open set (it only scopes blocking keys and is never a model
 feature), so a country unseen in training (France) is processed exactly like the others.
 `ARCHITECTURE.md` explains every file and design decision; the methodology write-up is `Documentation_template.md`
-at the root of the submission.
+at the root of the submission zip (`ML_chads_Documentation.md` in the repository).
 
 ## Layout
 

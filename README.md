@@ -5,7 +5,7 @@ Team: Aditya Ajeeth (Team Leader), Pratham Rampurmath, Adithya Sundar, Aayushman
 | Where | What |
 |---|---|
 | `code/business_entity_resolution/` | the runnable pipeline: `src/`, `tests/`, `README.md` (exact reproduction commands), pinned `requirements.txt`, `ARCHITECTURE.md` |
-| `Documentation_template.md` | the methodology write-up (filled-in challenge template) |
+| `ML_chads_Documentation.md` | the methodology write-up (the filled-in challenge template; named `Documentation_template.md` inside the submission zip, as the rules require) |
 | `problem_statement.md` | the challenge description |
 | `utils/validate_submission.py` | the organisers' submission validator |
 | `archive/` | development notes, planning docs and one-off analysis scripts kept for history; not needed to reproduce |
