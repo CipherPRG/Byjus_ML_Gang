@@ -1,7 +1,7 @@
 """Shared per-country processing: load -> normalise -> block -> features."""
 import numpy as np
 import pandas as pd
-from blocking import Side, candidates, init_name_stop
+from blocking import Side, candidates
 from features import pair_features
 from io_utils import read_tsv, read_country
 from norm import generic_addr_tokens
@@ -31,8 +31,6 @@ def build_country(dir_, prefix, country, cfg, workers=1):
     s1_df = read_country(f"{dir_}/{prefix}_source1.tsv", country)
     stop = country_stop(s1_df, cfg)
     kv2 = bool(cfg.get("keys_v2", False))  # missing in older configs -> exact old behaviour
-    if kv2:
-        init_name_stop(country, s1_df.business_name.values)
     s1 = Side(s1_df, stop, kv2)
     del s1_df
     parts = [load_side(f"{dir_}/{prefix}_source{k}.tsv", country, stop=stop, kv2=kv2) for k in (2, 3)]
