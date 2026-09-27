@@ -49,6 +49,10 @@ def main():
                     help="override threshold from config.json")
     ap.add_argument("--margin",  type=float, default=None,
                     help="override margin from config.json")
+    ap.add_argument("--keys-v3", action="store_true",
+                    help="EXTRA candidates from name-word-pair / address-word-pair keys on top of the model's own "
+                         "blocking (normal candidates unchanged). Off = exactly as before.")
+    ap.add_argument("--keys-v3-topk", type=int, default=5, help="max extra candidates per S1 (with --keys-v3)")
     ap.add_argument("--batch",   type=int, default=2_000_000,
                     help="max pairs per stage-1 inference batch (reduce if OOM; default 2 000 000)")
     a = ap.parse_args()
@@ -58,6 +62,9 @@ def main():
     # ------------------------------------------------------------------ config
     conf   = json.load(open(f"{a.models}/config.json"))
     cfg    = conf["cfg"]
+    if a.keys_v3:
+        cfg = {**cfg, "keys_v3": True, "keys_v3_topk": a.keys_v3_topk}
+        print(f"keys_v3 ON: up to {a.keys_v3_topk} extra candidates per S1")
     thr    = conf["thr"]    if a.thr    is None else a.thr
     margin = conf["margin"] if a.margin is None else a.margin
     print(f"using thr={thr:.2f}  margin={margin:.2f}  "

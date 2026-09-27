@@ -2,18 +2,18 @@
 import os
 import numpy as np
 import pandas as pd
-from blocking import Side, candidates
+from blocking import Side, candidates, candidates_extra
 from features import pair_features
 from io_utils import read_tsv, read_country
 from norm import generic_addr_tokens, learn_legal_sk, norm_addr, norm_name, skel
 
 
-def load_side(path, country, chunksize=300_000, stop=frozenset(), kv2=False, extra_legal_sk=frozenset()):
+def load_side(path, country, chunksize=300_000, stop=frozenset(), kv2=False, extra_legal_sk=frozenset(), kv3=False):
     sides = []
     for ch in read_tsv(path, chunksize=chunksize):
         ch = ch[ch.country == country]
         if len(ch):
-            sides.append(Side(ch, stop, kv2, extra_legal_sk))
+            sides.append(Side(ch, stop, kv2, extra_legal_sk, kv3))
     return Side.concat(sides) if sides else None
 
 
@@ -37,9 +37,12 @@ def build_country(dir_, prefix, country, cfg, workers=1, density_src=None):
     stop = country_stop(s1_df, cfg)
     kv2 = bool(cfg.get("keys_v2", False))  # missing in older configs -> exact old behaviour
     xsk = learn_legal_sk(s1_df.business_name.values) if cfg.get("learn_suffix") else frozenset()
-    s1 = Side(s1_df, stop, kv2, xsk)
+    pf = f"{dir_}/{prefix}_pairs.tsv"
+    # keys_v3 (EXTRA candidates, set only by predict/eval --keys-v3): never used with a recorded pairs file
+    kv3 = bool(cfg.get("keys_v3", False)) and not os.path.exists(pf)
+    s1 = Side(s1_df, stop, kv2, xsk, kv3)
     del s1_df
-    parts = [load_side(f"{dir_}/{prefix}_source{k}.tsv", country, stop=stop, kv2=kv2, extra_legal_sk=xsk)
+    parts = [load_side(f"{dir_}/{prefix}_source{k}.tsv", country, stop=stop, kv2=kv2, extra_legal_sk=xsk, kv3=kv3)
              for k in (2, 3)]
     parts = [p for p in parts if p is not None]
     if not parts:
@@ -47,13 +50,19 @@ def build_country(dir_, prefix, country, cfg, workers=1, density_src=None):
     oth = Side.concat(parts)
     if cfg.get("feat_v3"):
         attach_density(oth, density_src or f"{dir_}/{prefix}_source1.tsv", country, kv2, xsk, s1=s1)
-    pf = f"{dir_}/{prefix}_pairs.tsv"
     if os.path.exists(pf):
         # sample_v3: use the REAL full-density candidate pairs recorded by make_sample_v3.py instead of
         # re-blocking inside the sample (which would give the wrong rival counts). Never present for test.
         cand = load_pairs(pf, country, s1, oth)
     else:
         cand = candidates(s1, oth, max_block=cfg["max_block"], max_s1_block=cfg["max_s1_block"], topk=cfg["topk"])
+        if kv3:
+            ext = candidates_extra(s1, oth, cand, max_block=cfg["max_block"], max_s1_block=cfg["max_s1_block"],
+                                   topk=int(cfg.get("keys_v3_topk", 5)))
+            print(f"  [{country}] keys_v3: +{len(ext):,} extra candidate pairs "
+                  f"(+{len(ext) / max(len(cand), 1):.1%}) on top of {len(cand):,}", flush=True)
+            if len(ext):
+                cand = pd.concat([cand, ext], ignore_index=True).sort_values("r1", kind="stable").reset_index(drop=True)
     return s1, oth, cand
 
 

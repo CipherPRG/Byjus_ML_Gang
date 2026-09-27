@@ -94,12 +94,18 @@ def main():
     ap.add_argument("--val-split", action="store_true",
                     help="score only train.py's held-out validation entities (crc32(id+'v')%%10<3), so a model "
                          "trained on this --data folder can be compared fairly against another model")
+    ap.add_argument("--keys-v3", action="store_true",
+                    help="EXTRA candidates from name-word-pair / address-word-pair keys on top of the model's own "
+                         "blocking (normal candidates unchanged). Off = exactly as before.")
+    ap.add_argument("--keys-v3-topk", type=int, default=5, help="max extra candidates per S1 (with --keys-v3)")
     ap.add_argument("--density-src", default=None,
                     help="feat_v3 models only: FULL train_source1.tsv for density counts when --data is a sample")
     a = ap.parse_args()
 
     conf = json.load(open(f"{a.models}/config.json"))
     cfg, thr, margin = conf["cfg"], conf["thr"], conf["margin"]
+    if a.keys_v3:
+        cfg = {**cfg, "keys_v3": True, "keys_v3_topk": a.keys_v3_topk}
     print(f"models={a.models} cfg={cfg} thr={thr:.2f} margin={margin:.2f}", flush=True)
     b1 = lgb.Booster(model_file=f"{a.models}/stage1.txt")
     b2 = lgb.Booster(model_file=f"{a.models}/stage2.txt")
