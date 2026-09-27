@@ -2,9 +2,8 @@
 
 Companion to `README.md` (quick-start commands). This file goes deeper: exact dataset
 shape, what every source file does internally, and the relations/gotchas that aren't
-obvious from reading one file at a time. Last verified against the code and data on
-disk on 2026-09-27 (commit `58946ae`, `models_v8`: val F0.5 0.9537 on sample_v2,
-submitted as `output_v8`).
+obvious from reading one file at a time. Sections 1–7 describe the pipeline up to v8 (commit `58946ae`); **§8 lists everything
+added after that (v9–v11: rival-context training sample, EF decoder, feat_v3, speed-ups).**
 
 ## 1. Problem recap
 
@@ -247,3 +246,47 @@ python utils/validate_submission.py --matching output_v8/matching_results.tsv --
 ```
 (v8 run times on the team laptop: train ≈ 25 min, predict several hours on the full
 test set.)
+
+## 8. Changes after v8 (v9 – v11, 27 Sep)
+
+**Why:** local validation on `sample_v2` over-promised the leaderboard by ~1.5 pt for every model.
+`rival_density.py` found the cause: in the real test each S2/S3 record is a blocking candidate of
+~9.5 S1 businesses (71% have >= 5); `sample_v2` keeps only the sampled S1, so ~2. Stage 2's
+competition features and the "best S1 wins" decode were trained and validated with ~5x too little
+competition.
+
+- **`sample_v3` / `sample_v3_25`** (`src/make_sample_v3.py`, `src/shrink_sample_v3.py`): sampled S1 (same
+  crc32 hash as sample_v2) + every rival S1 that is a real candidate of a kept S2/S3 record +
+  `train_pairs.tsv` = the real full-density candidate pairs. `pipeline.build_country` uses
+  `<data>/<prefix>_pairs.tsv` when present instead of re-blocking inside the sample (never present
+  for test). `shrink_sample_v3.py` produces exactly what a smaller `--frac` would (verified
+  identical); `sample_v3_25` = 2.5% of S1 (55,291 sampled S1, 2.1M rival S1, ~41M pairs) fits 16 GB.
+- **`train.py`**: only S1 with a ground-truth row are labelled; rival pairs are **context rows**
+  (features written to a disk memmap in batches, scored by the final stage-1 model like test rows,
+  used only in stage 2 and the decode, never as training labels or in the score).
+- **Expected-F0.5 decoder** (`model.fit_ef_decoder` / `decode_ef_assigned`, `fit_decoder.py`):
+  isotonic calibration of p2 + lambda (expected unseen matches per S1), fitted on the ES half; per S1
+  keeps the top-k (k = 0 allowed) that maximises expected F0.5. Saved as `<models>/decoder.json`
+  only if it beats thr/margin on ES; `predict_ajusbyjus.py` uses it when present. Used by v9
+  (+0.1 local, +0.5 LB); v10 did not need it (thr/margin was better on ES).
+- **feat_v3** (`--feat-v3`, default off; `F1_V3` = 42 features): `nspan_jac` (digit-run Jaccard),
+  `sk_eq` (exact skeleton equality), IDF-weighted name/address similarity `n_idf_cos`, `n_idf_max`,
+  `a_idf_cos`, `a_idf_max` (word rarity counted over the country's FULL S1 file, words seen < 3
+  times share one "rare" weight); stage 2 adds log sibling density (S1 count per 100k sharing the
+  record's exact normalised address / name skeleton). `--density-src` must point to the FULL
+  `train_source1.tsv` when training on a sample. `--learn-suffix` exists but is not used (it learns
+  real words like "technologies").
+- **Speed (no output change):** per-record name/address parts, phonetic skeletons and digit checks
+  are cached (`functools.lru_cache`), ASCII text skips accent stripping. Verified bitwise identical
+  (normalised strings, keys, candidates, IDF tables, 36- and 42-column features); ~30% faster
+  blocking, ~25% faster features single-process.
+- **`blend_scores.py`** (repo root): averages the saved stage-2 scores of two models; the weight and
+  thr/margin are chosen on the ES half, and the blend is used only if it beats both models alone there.
+- **`eval_full.py --val-split`** scores a model on exactly train.py's validation entities of any
+  data folder, so models trained on the same sample compare fairly.
+
+| model | trained on | changes | clean-half F0.5 (sample_v3_25) | LB |
+|---|---|---|---|---|
+| v9 | sample_v2 | v8 + EF decoder | 0.9554 | 0.945 |
+| v10 | sample_v3_25 | rival context rows, thr 0.98 / margin 0.32, 1549 / 262 trees | 0.9621 | [FILL] |
+| v11 | sample_v3_25 | v10 + feat_v3 (IDF, density) | [FILL] | [FILL] |

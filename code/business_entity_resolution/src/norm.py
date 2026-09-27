@@ -1,4 +1,5 @@
 """Text normalisation for business names and addresses (no external data)."""
+from functools import lru_cache
 import re, unicodedata
 
 LEGAL = {"llc","inc","ltd","limited","private","pvt","corp","corporation","co","company",
@@ -129,6 +130,7 @@ _SKR = [("ph", "f"), ("kh", "k"), ("gh", "g"), ("bh", "b"), ("dh", "d"), ("th", 
         ("ch", "k"), ("ck", "k"), ("qu", "k"), ("x", "ks"), ("c", "k"), ("q", "k"), ("w", "v"), ("z", "j"), ("g", "j")]
 
 
+@lru_cache(maxsize=1 << 18)
 def skel(tok: str) -> str:
     """consonant skeleton: crude phonetic key comparable between Latin and transliterated Indic text"""
     for a, b in _SKR:
@@ -138,6 +140,8 @@ def skel(tok: str) -> str:
 
 
 def strip_accents(s: str) -> str:
+    if s.isascii():  # NFKD never changes ASCII and ASCII has no combining marks -> same result
+        return s
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
 
@@ -145,7 +149,7 @@ def norm_name(s: str, extra_legal_sk: frozenset = frozenset()):
     """returns (clean string, core tokens list without legal suffixes).
     extra_legal_sk: additional skeleton strings to treat as legal suffixes (feat_v3 only).
     When empty (the default, used by all existing call sites), behaviour is identical to before."""
-    if any(c >= "ऀ" for c in s):
+    if s and max(s) >= "ऀ":  # same as any(c >= "ऀ" for c in s), done in C
         s = translit(s)
     s = strip_accents(s).lower().replace("&", " and ").replace("'", "").replace(".", "")
     s = _SPACE.sub(" ", _NONWORD.sub(" ", s)).strip()
@@ -165,7 +169,7 @@ ORD = {"first": "1st", "second": "2nd", "third": "3rd", "fourth": "4th", "fifth"
 def norm_addr(s: str, ords=False):
     """returns (clean string, tokens list). Expands abbreviations, strips leading zeros.
     ords=True (keys_v2 configs only): spelled-out ordinals -> digits ('thirteenth' -> '13th')."""
-    if any(c >= "ऀ" for c in s):
+    if s and max(s) >= "ऀ":  # same as any(c >= "ऀ" for c in s), done in C
         s = translit(s)
     s = strip_accents(s).lower().replace(".", "")
     s = _STATE_RE.sub(lambda m: US_STATES[m.group(1)], s)
@@ -183,6 +187,12 @@ def norm_addr(s: str, ords=False):
     return " ".join(out), out
 
 
+@lru_cache(maxsize=1 << 18)
+def _hasdig(t):
+    """True if the token contains a digit (cached: address tokens repeat a lot)."""
+    return any(c.isdigit() for c in t)
+
+
 def addr_keys(toks, max_keys=3, stop=frozenset()):
     """(number, following street word) keys, e.g. ('41','groton').
     `stop`: extra generic words to skip (see generic_addr_tokens). Without it, a French address
@@ -190,7 +200,7 @@ def addr_keys(toks, max_keys=3, stop=frozenset()):
     keys = []
     look = 6 if stop else 4  # skipping generic words needs a slightly longer lookahead
     for i, t in enumerate(toks):
-        if any(c.isdigit() for c in t) and len(t) <= 8:
+        if _hasdig(t) and len(t) <= 8:
             for j in range(i + 1, min(i + look, len(toks))):
                 w = toks[j]
                 if w.isalpha() and len(w) > 2 and w not in ADDR_STOP and w not in stop:

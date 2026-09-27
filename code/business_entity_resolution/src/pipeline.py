@@ -46,7 +46,7 @@ def build_country(dir_, prefix, country, cfg, workers=1, density_src=None):
         return s1, None, None
     oth = Side.concat(parts)
     if cfg.get("feat_v3"):
-        attach_density(oth, density_src or f"{dir_}/{prefix}_source1.tsv", country, kv2, xsk)
+        attach_density(oth, density_src or f"{dir_}/{prefix}_source1.tsv", country, kv2, xsk, s1=s1)
     pf = f"{dir_}/{prefix}_pairs.tsv"
     if os.path.exists(pf):
         # sample_v3: use the REAL full-density candidate pairs recorded by make_sample_v3.py instead of
@@ -57,19 +57,31 @@ def build_country(dir_, prefix, country, cfg, workers=1, density_src=None):
     return s1, oth, cand
 
 
-def attach_density(oth, s1_path, country, kv2, xsk, chunksize=300_000):
+def attach_density(oth, s1_path, country, kv2, xsk, chunksize=300_000, s1=None):
     """feat_v3: per S2/S3 record, how many S1 businesses of this country (in the FULL S1 file) share its
     exact normalised address / name skeleton, scaled per 100k S1 so train and test sizes compare.
-    High = non-specific (sibling businesses at one address, very common name)."""
+    High = non-specific (sibling businesses at one address, very common name).
+    Same pass: word rarity (IDF) of name / address words among the country's S1 records -> s1.idf,
+    used by the IDF-weighted similarity features (same token definitions as features.py)."""
     from collections import Counter
-    ca, cn, n = Counter(), Counter(), 0
+    from features import _core
+    ca, cn, dn, da, n = Counter(), Counter(), Counter(), Counter(), 0
     for ch in read_tsv(s1_path, chunksize=chunksize):
         ch = ch[ch.country == country]
         for nm, ad in zip(ch.business_name.values, ch.business_address.values):
-            ca[norm_addr(ad, ords=kv2)[0]] += 1
-            _, core = norm_name(nm, xsk)
+            aclean, atoks = norm_addr(ad, ords=kv2)
+            ca[aclean] += 1
+            nclean, core = norm_name(nm, xsk)
             cn[" ".join(x for x in (skel(t) for t in core) if x)] += 1
+            dn.update(set(_core(nclean))); da.update(set(atoks))
             n += 1
+    if s1 is not None:
+        # keep only words seen >= 3 times (most of the vocabulary is rarer; the tables go to every worker,
+        # so this keeps RAM low). Rarer / unseen words all get the 'miss' weight = log((n+1)/3).
+        mx = float(np.log(n + 1))            # normaliser: the largest possible weight
+        s1.idf = {"n": {t: float(np.log((n + 1) / (c + 1))) for t, c in dn.items() if c >= 3},
+                  "a": {t: float(np.log((n + 1) / (c + 1))) for t, c in da.items() if c >= 3},
+                  "mx": max(mx, 1e-6), "miss": float(np.log((n + 1) / 3.0))}
     k = 1e5 / max(n, 1)
     oth.dens_addr = np.fromiter((ca.get(a, 0) * k for a in oth.aclean), dtype=np.float32, count=len(oth))
     oth.dens_name = np.fromiter((cn.get(s, 0) * k for s in oth.nskel), dtype=np.float32, count=len(oth))

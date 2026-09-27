@@ -2,7 +2,7 @@
 import zlib
 import numpy as np
 import pandas as pd
-from norm import norm_name, norm_addr, addr_keys, ADDR_STOP, skel
+from norm import norm_name, norm_addr, addr_keys, ADDR_STOP, skel, _hasdig
 
 # weight of each key type (address keys are the most reliable)
 WEIGHT = {"A": 3, "R": 2, "N": 3, "Q": 2, "P": 2, "T": 1, "U": 1, "S": 1, "K": 1, "V": 2, "X": 3,
@@ -10,8 +10,6 @@ WEIGHT = {"A": 3, "R": 2, "N": 3, "Q": 2, "P": 2, "T": 1, "U": 1, "S": 1, "K": 1
 _DOM = ("com", "net", "org")
 
 
-def _hasdig(t):
-    return any(ch.isdigit() for ch in t)
 
 
 def keys_v2(country, core, atoks, stop):
@@ -73,7 +71,7 @@ def keys_for(country, core, atoks, stop=frozenset(), kv2=False):
         nk += ["k" + x[:3] for x in sorted(set(sk), key=lambda z: (-len(z), z)) if len(x) >= 3][:2]
     lt = sorted({t for t in core if len(t) >= 5 and t.isalpha()}, key=lambda t: (-len(t), t))[:1]
     nk += ["t" + t[:4] for t in lt]
-    ak = ["d" + t for t in [t for t in atoks if any(ch.isdigit() for ch in t) and len(t) <= 8][:2]]
+    ak = ["d" + t for t in [t for t in atoks if _hasdig(t) and len(t) <= 8][:2]]
     ak += ["w" + t for t in sorted({t for t in atoks if len(t) >= 5 and t.isalpha() and t not in ADDR_STOP
                                     and t not in stop}, key=lambda t: (-len(t), t))[:2]]
     for a_ in nk[:4]:
