@@ -1,4 +1,4 @@
-# ML chads — Amazon ML Challenge 2026: Business Entity Resolution
+#Amazon ML Challenge 2026: Business Entity Resolution
 
 Team: Aditya Ajeeth (Team Leader), Pratham Rampurmath, Adithya Sundar, Aayushman Singh.
 
