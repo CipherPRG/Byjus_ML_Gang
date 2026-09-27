@@ -86,13 +86,7 @@ def translit(s: str) -> str:
     return re.sub(r"(?<=[^aeiou\s])a(?=\s|$)", "", res) if False else res
 
 
-LEGAL_SK = {"prvt", "lmtd", "lmt", "pr", "l", "prl", "ltd", "llp", "kmpn", "kp", "prvtl", "lmtdd",
-            # Transliteration noise: Indic-script "Private Limited" routes through translit() can
-            # produce surface forms whose skel() does not match existing entries.
-            # Verified from analysis_report.md §3.2 hard-zone examples on sample_v2 India:
-            #   "praivarr"  -> skel drops {a,i} -> "prvr"   (trailing rr collapsed to r)
-            #   "limirrad"  -> skel drops {i,a} -> "lmrd"   (rr collapsed to r, d survives)
-            "prvr", "lmrd"}
+LEGAL_SK = {"prvt", "lmtd", "lmt", "pr", "l", "prl", "ltd", "llp", "kmpn", "kp", "prvtl", "lmtdd"}
 _SKR = [("ph", "f"), ("kh", "k"), ("gh", "g"), ("bh", "b"), ("dh", "d"), ("th", "t"), ("jh", "j"), ("sh", "s"),
         ("ch", "k"), ("ck", "k"), ("qu", "k"), ("x", "ks"), ("c", "k"), ("q", "k"), ("w", "v"), ("z", "j"), ("g", "j")]
 
