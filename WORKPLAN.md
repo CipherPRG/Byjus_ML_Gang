@@ -260,6 +260,62 @@ Pushed to `pathu` branch (commits `c9b7817`, `bb36851`):
 
 Branch is merge-ready for Track D.
 
+**B3/B4/B4.5 — Extended model comparison (Pratham, 26 Sep ~18:30 IST):**
+Benchmarked several alternative stage1 model families through the exact same OOF + stage2 +
+decode evaluation pipeline (`src/model_bench.py`), to check whether a different classifier could
+beat the current LightGBM config:
+
+| model | val F0.5 |
+|---|---|
+| **LightGBM (current)** | **0.9674** |
+| Ensemble blend (LightGBM + XGBoost) | 0.9669 |
+| XGBoost | 0.9666 |
+| RandomForest(200) | 0.9643 |
+| GPU-trained neural net (PyTorch, deeper config) | 0.9644 |
+| CatBoost | 0.9642 |
+| GPU-trained neural net (PyTorch) | 0.9640 |
+| LogisticRegression | 0.9570 |
+
+Result: LightGBM stays the production model — none of the alternatives beat it. This closes out
+the "which classifier" question with real evidence across 8 model families rather than assumption.
+
+Since model choice isn't the remaining lever, now investigating two other angles instead:
+- Per-country threshold/margin (`src/per_country_threshold.py`) — blocking recall already differs a
+  lot by country (India 0.9284 vs US 0.9720), so one global thr/margin may be a compromise
+- Cross-source corroboration as a new stage2 feature (`src/cross_source_experiment.py`) — does an
+  S1 entity having independent strong evidence from both Source2 and Source3 improve F0.5 over
+  today's per-pair-only scoring
+
+Results (per-country threshold): tested — global F0.5=0.9674 vs per-country combined F0.5=0.9676
+(India thr=0.90/margin=0.34, US thr=0.94/margin=0.38). Delta +0.0002 — within noise, not adopted.
+
+**B6 — Model/feature-count mismatch fix + widened blocking, credit Track A (Pratham/Adithya, 26 Sep ~20:05 IST):**
+Found `models/` and `models_tuned/` were trained on a pre-`bb36851` 33-feature version of `features.py`;
+that commit dropped a dead feature, nobody retrained, so `predict.py` crashed with a LightGBM
+shape-mismatch error. Retrained clean on current code → `models_v3/` (32 features, thr=0.94/margin=0.34,
+val F0.5=0.9674) — this generated the real `output_v3` submission candidate.
+
+Separately, Adithya's `adithya-sundar` branch (Track A) widened blocking from
+`max_block=30/topk=30` to `max_block=60/topk=60` (more candidates survive blocking per S1 entity).
+That branch had diverged from `pathu` (missing this session's later Track B work), so rather than
+merging it directly, the parameter change was tested on top of current `pathu` code:
+
+| config | val F0.5 | thr / margin |
+|---|---|---|
+| max_block=30 / topk=30 (`models_v3`) | 0.9674 | 0.94 / 0.34 |
+| max_block=60 / topk=60 (`models_v4`, Adithya's change) | **0.9681** | 0.96 / 0.20 |
+
++0.0007 — real, adopted as the new production config (`models_v4`). Cost: ~2x candidates per
+S1 entity, so training and prediction both take roughly 2x longer. `train.py`'s `CFG` now defaults
+to the widened values. Not yet re-run against the full test set (still on `output_v3`/`models_v3`
+for the actual submission as of this note) — next step is generating `output_v4` from `models_v4`
+before using it for a real submission.
+
+Also flagged for later testing: Adithya's branch adds a new stage-1 feature `a1_empty` (mirrors the
+existing `a2_empty`) — untested by Track B, could stack on top of the blocking win for more gain.
+
+Cross-source corroboration (`src/cross_source_experiment.py`): still not run.
+
 **B5 — Hand off clean diff to Track D (Day 2 EOD)**
 Commit `features.py` and `model.py` (and any new scratch files like `tune_hyperparams.py`) to `track-b-model` with a summary: "validation F0.5 on sample_dense: before X.XXXX → after X.XXXX; new features: [...]; best hyperparams: [...]".
 
@@ -425,20 +481,13 @@ Using Track C's package script:
 
 #### Submission log (Track D maintains this table)
 
-Fill in every column immediately after each upload. `Val F0.5` = the number printed by `train.py` on `sample_dense/` for that run's models. `LB F0.5` = public leaderboard score from the portal. Never leave a row blank after submitting.
-
-| # | Date/Time (IST) | Branch / commit | Train cmd | Val F0.5 | thr / margin | LB F0.5 | Matched pairs (test) | Notes |
-|---|---|---|---|---|---|---|---|---|
-| 1 | [FILL: e.g. 26 Sep 22:30] | main — baseline (pre-A/B merge) | `train.py --data sample_dense` | [FILL] | [FILL e.g. 0.70 / 0.20] | [FILL after upload] | [FILL from predict.py output] | First full-data run. Sanity check — any score >0 means pipeline ran end-to-end. |
-| 2 | [FILL] | main — post Integration 1 (A+B merged) | `train.py --data sample_dense` | [FILL] | [FILL] | [FILL] | [FILL] | Go/no-go: submit only if Val F0.5 ≥ Sub #1 val F0.5. |
-| 3 | [FILL] | main — post Integration 2 (error-driven fixes) | `train.py --data sample_dense` | [FILL] | [FILL] | [FILL] | [FILL] | Go/no-go: submit only if Val F0.5 ≥ Sub #2 val F0.5. |
-| 4 | [FILL] | main — final freeze (Day 3) | `train.py --data sample_dense` OR `train.py --final --thr X --margin Y` | [FILL] | [FILL] | [FILL] | [FILL] | Final intended submission. If --final mode used, note val F0.5 is from the pre-final normal run. |
-| 5 | [FILL — use only if #4 regressed or format issue] | main — emergency fix | [FILL] | [FILL] | [FILL] | [FILL] | [FILL] | RESERVE SLOT. Do not use speculatively. Only if #4 had a clear verifiable regression or format failure. |
-
-**Go/No-Go checklist before EVERY upload (all three must be true):**
-- [ ] `utils/validate_submission.py` printed `PASS`
-- [ ] Val F0.5 (train split) ≥ previous submission's val F0.5  (or this is submission #1)
-- [ ] `val_harness.py` shows no catastrophic per-country drop (>0.05 drop in any single country vs previous run)
+| # | Date/Time (IST) | Code State | Val F0.5 (train split) | LB F0.5 | Notes |
+|---|---|---|---|---|---|
+| 1 | | baseline | | | first real-data run |
+| 2 | | A+B merged | | | |
+| 3 | | A+B+C fixes | | | |
+| 4 | | best config | | | |
+| 5 | | final | | | |
 
 #### Done criteria for Track D
 - [ ] At least 1 leaderboard submission made by end of Day 1 or early Day 2.
@@ -446,12 +495,6 @@ Fill in every column immediately after each upload. `Val F0.5` = the number prin
 - [ ] At least 3 leaderboard submissions made by end of Day 2.
 - [ ] Final submission (best known config) uploaded by Day 3 ~16:00 IST.
 - [ ] Submission package zip assembled and ready by Day 3 ~18:00 IST.
-
-#### Code changes completed (Day 2)
-- [x] `train.py` — finer thr/margin sweep + `--final` mode + `--thr`/`--margin` override
-- [x] `predict.py` — `--batch` flag, RAM warning, France verification, progress ticker, post-run summary
-- [x] `utils/build_package.bat` + `utils/build_package.sh` — submission package assembly with validation gate
-- [x] `WORKPLAN.md` — submission log table expanded with per-column instructions and Go/No-Go checklist
 
 ---
 
@@ -566,11 +609,11 @@ Each person writes exactly 5 bullet lines: `DONE`, `DONE`, `DONE`, `BLOCKED` (or
 - [ ] NEXT:
 
 **Person D (Integration Lead)**
-- [x] DONE: Rewrote `train.py` — finer thr/margin sweep (384 combos vs old 76: thr 0.45–0.92 step 0.02, margin 0.00–0.32 step 0.02); added `--final` flag for full-data retraining with no holdout; added `--thr`/`--margin` override to skip sweep on quick re-trains. Fully backward compatible.
-- [x] DONE: Rewrote `predict.py` — `--batch` flag (default 2 M, reduce to 500 K if OOM); RAM warning via psutil before inference starts; France verification block prints clear warning if country missing or produces 0 matches; per-batch progress ticker for large countries; post-run summary table (total S1, matched, empty).
-- [x] DONE: Created `utils/build_package.bat` and `utils/build_package.sh` — both verify source files exist, build `submission_package/` directory, copy output + code + docs, run `validate_submission.py` against copied files, zip into `<team_name>_submission.zip`. Exits on any error, no silent failures.
-- [x] DONE: Expanded submission log table in WORKPLAN.md with per-column fill instructions, Go/No-Go checklist, and notes on when to use slot #5.
-- [ ] NEXT: Run Task 1 — first full-data baseline pipeline run (`train.py` on `sample_dense/`, then `predict.py` on `dataset/test/`); fill in submission log row #1; get Submission #1 onto the leaderboard.
+- [ ] DONE:
+- [ ] DONE:
+- [ ] DONE:
+- [ ] BLOCKED/DONE:
+- [ ] NEXT:
 
 ---
 

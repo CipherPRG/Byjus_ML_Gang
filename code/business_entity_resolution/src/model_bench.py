@@ -17,12 +17,37 @@ import lightgbm as lgb
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier
 
 from io_utils import read_tsv, countries_of
 from pipeline import build_country
 from features import pair_features
 from model import stage2_matrix, raw2, fit_stage2, decode_prep, decode_apply, P1 as CURRENT_P1
 from evaluate import f05_macro
+
+# Optional heavier candidates - only registered if the library is actually installed, so this
+# script never crashes just because catboost/xgboost aren't pip-installed yet. Install with:
+#   pip install catboost xgboost
+try:
+    from catboost import CatBoostClassifier
+    HAVE_CATBOOST = True
+except ImportError:
+    HAVE_CATBOOST = False
+
+try:
+    from xgboost import XGBClassifier
+    HAVE_XGBOOST = True
+except ImportError:
+    HAVE_XGBOOST = False
+
+try:
+    import torch
+    import torch.nn as nn
+    HAVE_TORCH = True
+    TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+except ImportError:
+    HAVE_TORCH = False
+    TORCH_DEVICE = "cpu"
 
 CFG = dict(max_block=30, max_s1_block=200, topk=30)
 
@@ -60,6 +85,169 @@ class Pipeline_LR:
         return self.m.predict_proba(self.sc.transform(X))
 
 
+class MLPWrap:
+    """StandardScaler + MLPClassifier (feedforward neural net), same .fit/.predict_proba
+    interface as everything else here. Trained on the same engineered tabular features as
+    every other candidate - a from-scratch embedding/transformer model on raw text is NOT
+    feasible to build and validate safely in the time left, so this is the honest version of
+    'try a neural net' that fits the same fair benchmark."""
+    def __init__(self, hidden=(64, 32), **params):
+        self.hidden = hidden
+        self.params = params
+
+    def fit(self, X, y):
+        self.sc = StandardScaler()
+        Xs = self.sc.fit_transform(X)
+        self.m = MLPClassifier(hidden_layer_sizes=self.hidden, activation="relu",
+                                alpha=1e-3, learning_rate_init=1e-3, max_iter=300,
+                                early_stopping=True, n_iter_no_change=15, **self.params)
+        self.m.fit(Xs, y)
+        return self
+
+    def predict_proba(self, X):
+        return self.m.predict_proba(self.sc.transform(X))
+
+
+class _TorchNet(nn.Module if HAVE_TORCH else object):
+    """Plain feedforward net: Linear -> BatchNorm -> ReLU -> Dropout, stacked, sigmoid output."""
+    def __init__(self, n_in, hidden=(128, 64, 32), dropout=0.2):
+        super().__init__()
+        layers = []
+        d = n_in
+        for h in hidden:
+            layers += [nn.Linear(d, h), nn.BatchNorm1d(h), nn.ReLU(), nn.Dropout(dropout)]
+            d = h
+        layers.append(nn.Linear(d, 1))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.net(x).squeeze(-1)
+
+
+class TorchWrap:
+    """GPU-trained feedforward neural net (PyTorch), same .fit/.predict_proba interface as
+    everything else here. Trained on the SAME engineered tabular features as LightGBM/CatBoost/
+    XGBoost - honest apples-to-apples comparison, just a different model family. Uses the GPU
+    (RTX 4050 / cuda) when available - orders of magnitude faster than sklearn's CPU-only MLP."""
+    def __init__(self, hidden=(128, 64, 32), epochs=40, batch_size=4096, lr=1e-3,
+                 dropout=0.2, patience=5):
+        self.hidden = hidden
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.lr = lr
+        self.dropout = dropout
+        self.patience = patience
+
+    def fit(self, X, y):
+        dev = TORCH_DEVICE
+        self.sc = StandardScaler()
+        Xs = self.sc.fit_transform(X).astype(np.float32)
+        y = y.astype(np.float32)
+
+        # internal train/early-stop split (90/10, random - fine for a benchmark)
+        n = len(y)
+        rng = np.random.RandomState(0)
+        idx = rng.permutation(n)
+        n_val = max(1, int(n * 0.1))
+        val_idx, tr_idx = idx[:n_val], idx[n_val:]
+
+        Xt = torch.tensor(Xs[tr_idx], device=dev)
+        yt = torch.tensor(y[tr_idx], device=dev)
+        Xv = torch.tensor(Xs[val_idx], device=dev)
+        yv = torch.tensor(y[val_idx], device=dev)
+
+        self.m = _TorchNet(Xs.shape[1], hidden=self.hidden, dropout=self.dropout).to(dev)
+        pos_weight = torch.tensor([(len(yt) - yt.sum()) / max(yt.sum(), 1)], device=dev)
+        crit = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        opt = torch.optim.Adam(self.m.parameters(), lr=self.lr)
+
+        best_val = float("inf"); best_state = None; bad = 0
+        n_tr = len(yt)
+        for ep in range(self.epochs):
+            self.m.train()
+            perm = torch.randperm(n_tr, device=dev)
+            for s in range(0, n_tr, self.batch_size):
+                b = perm[s:s + self.batch_size]
+                opt.zero_grad()
+                loss = crit(self.m(Xt[b]), yt[b])
+                loss.backward()
+                opt.step()
+            self.m.eval()
+            with torch.no_grad():
+                vloss = crit(self.m(Xv), yv).item()
+            if vloss < best_val - 1e-4:
+                best_val = vloss; best_state = {k: v.clone() for k, v in self.m.state_dict().items()}
+                bad = 0
+            else:
+                bad += 1
+                if bad >= self.patience:
+                    break
+        if best_state is not None:
+            self.m.load_state_dict(best_state)
+        return self
+
+    def predict_proba(self, X):
+        dev = TORCH_DEVICE
+        Xs = self.sc.transform(X).astype(np.float32)
+        self.m.eval()
+        with torch.no_grad():
+            logits = self.m(torch.tensor(Xs, device=dev)).cpu().numpy()
+        p1 = 1.0 / (1.0 + np.exp(-logits))
+        return np.stack([1 - p1, p1], axis=1)
+
+
+class BlendWrap:
+    """Averages the predict_proba of several sub-estimators (built from zero-arg factories).
+    Different model families make different mistakes, so blending their probabilities often
+    beats any single one - cheap to try since it reuses estimators we've already benchmarked."""
+    def __init__(self, factories, weights=None):
+        self.factories = factories
+        self.weights = weights or [1.0 / len(factories)] * len(factories)
+
+    def fit(self, X, y):
+        self.models = []
+        for f in self.factories:
+            est = f()
+            est.fit(X, y)
+            self.models.append(est)
+        return self
+
+    def predict_proba(self, X):
+        p1 = np.zeros(len(X), dtype=np.float64)
+        for w, m in zip(self.weights, self.models):
+            p1 += w * m.predict_proba(X)[:, 1]
+        return np.stack([1 - p1, p1], axis=1)
+
+
+class CatWrap:
+    """CatBoostClassifier, same .fit/.predict_proba interface. verbose=False to keep bench
+    output clean; class weighting via auto_class_weights (CatBoost's is_unbalance equivalent)."""
+    def __init__(self, **params):
+        self.params = params
+
+    def fit(self, X, y):
+        self.m = CatBoostClassifier(auto_class_weights="Balanced", verbose=False, **self.params)
+        self.m.fit(X, y)
+        return self
+
+    def predict_proba(self, X):
+        return self.m.predict_proba(X)
+
+
+class XGBWrap:
+    """XGBClassifier, same .fit/.predict_proba interface."""
+    def __init__(self, **params):
+        self.params = params
+
+    def fit(self, X, y):
+        self.m = XGBClassifier(eval_metric="auc", **self.params)
+        self.m.fit(X, y)
+        return self
+
+    def predict_proba(self, X):
+        return self.m.predict_proba(X)
+
+
 CANDIDATES = {
     # name -> zero-arg factory returning a fresh, unfit estimator with .fit/.predict_proba
     "logreg":       lambda: Pipeline_LR(),
@@ -72,7 +260,39 @@ CANDIDATES = {
                                             "learning_rate": 0.08}),
     "lgb_500_127_lr08": lambda: LGBWrap(**{**CURRENT_P1, "n_estimators": 500, "num_leaves": 127,
                                             "learning_rate": 0.08}),
+    "mlp":          lambda: MLPWrap(hidden=(64, 32)),
+    "mlp_deep":     lambda: MLPWrap(hidden=(128, 64, 32)),
 }
+
+if HAVE_CATBOOST:
+    CANDIDATES["catboost"] = lambda: CatWrap(iterations=500, depth=6, learning_rate=0.05)
+else:
+    print("[model_bench] catboost not installed - skipping 'catboost' candidate "
+          "(pip install catboost to enable it)")
+
+if HAVE_XGBOOST:
+    CANDIDATES["xgboost"] = lambda: XGBWrap(n_estimators=500, max_depth=6, learning_rate=0.05,
+                                             subsample=0.8, colsample_bytree=0.8)
+else:
+    print("[model_bench] xgboost not installed - skipping 'xgboost' candidate "
+          "(pip install xgboost to enable it)")
+
+if HAVE_TORCH:
+    print(f"[model_bench] torch available, device={TORCH_DEVICE}")
+    CANDIDATES["torchnet"] = lambda: TorchWrap(hidden=(128, 64, 32), epochs=40)
+    CANDIDATES["torchnet_deep"] = lambda: TorchWrap(hidden=(256, 128, 64, 32), epochs=40)
+else:
+    print("[model_bench] torch not installed - skipping 'torchnet'/'torchnet_deep' candidates "
+          "(pip install torch to enable them)")
+
+# Blends - reuse the factories already registered above, so they only appear once xgboost/
+# catboost are actually available.
+if HAVE_XGBOOST:
+    CANDIDATES["blend_lgb_xgb"] = lambda: BlendWrap(
+        [lambda: LGBWrap(**CURRENT_P1), CANDIDATES["xgboost"]])
+if HAVE_XGBOOST and HAVE_CATBOOST:
+    CANDIDATES["blend_lgb_xgb_cat"] = lambda: BlendWrap(
+        [lambda: LGBWrap(**CURRENT_P1), CANDIDATES["xgboost"], CANDIDATES["catboost"]])
 
 
 def sweep_f05(r1, ro, p2, u1, uo, val_ids, vt):

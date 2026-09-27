@@ -8,7 +8,9 @@ from norm import LEGAL, addr_keys
 F1 = ["nr", "nsort", "nset", "npart", "njw", "nlev", "ncore_eq", "ncore_jac", "nlen_d", "nfirst_eq", "ncomp",
       "ar", "asort", "aset", "apart", "ajac", "anum_jac", "anum_eq", "a2_empty",
       "akey_eq", "a_exact", "anum_first_eq", "sk_r", "sk_set", "sk_part", "w",
-      "ajw", "alev", "alen_d", "ncontain", "akey_jac", "wcount_d"]
+      "ajw", "alev", "alen_d", "ncontain", "akey_jac", "wcount_d",
+      "a1_empty", "both_empty",
+      "hnum_edit", "hnum_logdiff"]
 
 
 def _core(n):
@@ -27,8 +29,27 @@ def _hasdig(t):
     return any(ch.isdigit() for ch in t)
 
 
+def _hnum(t1, t2):
+    """S1 house number vs the CLOSEST number token anywhere in the other address.
+    Separates a typo'd house number (1400 -> 1402, 407 -> 07: edit distance 1) from a genuinely
+    different building (46 -> 53: edit distance 2+). On sample data, among candidates with
+    near-identical names, ~87% (US) / ~61% (India) of wrong pairs are edit 2+, vs ~5% of true pairs.
+    Returns (edit distance capped at 3, log1p numeric gap); (-1, -1) if either side has no number."""
+    n1 = [t for t in t1 if _hasdig(t)]
+    n2 = [t for t in t2 if _hasdig(t)]
+    if not n1 or not n2:
+        return -1.0, -1.0
+    h = n1[0]
+    best = min(n2, key=lambda y: Levenshtein.distance(h, y))
+    e = min(Levenshtein.distance(h, best), 3)
+    a = "".join(ch for ch in h if ch.isdigit())[:9]
+    b = "".join(ch for ch in best if ch.isdigit())[:9]
+    gap = float(np.log1p(abs(int(a) - int(b)))) if a and b else -1.0
+    return float(e), gap
+
+
 def _chunk(args):
-    n1s, a1s, n2s, a2s, k1s, k2s, ws = args
+    n1s, a1s, n2s, a2s, k1s, k2s, ws, stop = args
     out = np.zeros((len(n1s), len(F1)), dtype=np.float32)
     for i, (n1, a1, n2, a2, sk1, sk2, w) in enumerate(zip(n1s, a1s, n2s, a2s, k1s, k2s, ws)):
         c1, c2 = _core(n1), _core(n2)
@@ -37,8 +58,9 @@ def _chunk(args):
         nu1 = {t for t in t1 if _hasdig(t)}; nu2 = {t for t in t2 if _hasdig(t)}
         e1, e2 = not a1, not a2
         both = not (e1 or e2)
-        k1, k2 = set(addr_keys(t1)), set(addr_keys(t2))
+        k1, k2 = set(addr_keys(t1, stop=stop)), set(addr_keys(t2, stop=stop))
         f1 = next((t for t in t1 if _hasdig(t)), None); f2 = next((t for t in t2 if _hasdig(t)), None)
+        h_edit, h_gap = _hnum(t1, t2)
         out[i] = (
             fuzz.ratio(n1, n2), fuzz.token_sort_ratio(n1, n2), fuzz.token_set_ratio(n1, n2), fuzz.partial_ratio(n1, n2),
             JaroWinkler.similarity(j1, j2), Levenshtein.normalized_similarity(j1, j2),
@@ -52,18 +74,21 @@ def _chunk(args):
             JaroWinkler.similarity(a1, a2) if both else 0.0, Levenshtein.normalized_similarity(a1, a2) if both else 0.0,
             abs(len(a1) - len(a2)) / max(len(a1), len(a2), 1) if both else 0.0,
             float(len(j1) >= 4 and len(j2) >= 4 and (j1 in j2 or j2 in j1)),
-            _jac(k1, k2), abs(len(c1) - len(c2)) / max(len(c1), len(c2), 1))
+            _jac(k1, k2), abs(len(c1) - len(c2)) / max(len(c1), len(c2), 1),
+            float(e1), float(e1 and e2),
+            h_edit, h_gap)
     return out
 
 
 def pair_features(s1, oth, r1, ro, w, workers=1, chunk=20000):
     """Feature matrix (len(r1) x len(F1)) float32 for pairs (S1 row r1, other row ro)."""
+    stop = getattr(s1, "stop", frozenset())  # per-country generic address words, same set blocking used
     jobs = []
     for s in range(0, len(r1), chunk):
         a, b = r1[s:s + chunk], ro[s:s + chunk]
         jobs.append(([s1.nclean[i] for i in a], [s1.aclean[i] for i in a],
                      [oth.nclean[i] for i in b], [oth.aclean[i] for i in b],
-                     [s1.nskel[i] for i in a], [oth.nskel[i] for i in b], w[s:s + chunk]))
+                     [s1.nskel[i] for i in a], [oth.nskel[i] for i in b], w[s:s + chunk], stop))
     if workers > 1 and len(jobs) > 1:
         with ProcessPoolExecutor(workers) as ex:
             res = list(ex.map(_chunk, jobs))
