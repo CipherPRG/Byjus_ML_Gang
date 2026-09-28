@@ -189,8 +189,3 @@ Participants are STRICTLY NOT ALLOWED to use external databases, APIs, or servic
 - All registered teams can play this hackathon.
 - There is no negative marking for this.
 - All decisions in the matter of eligibility, authenticity & final judgement will be with Unstop and the organizer.
-
----
-**NOT stated in this document — verify on the Unstop portal directly:**
-- Exact deadline time on the final day.
-- Whether "final rankings based on the private leaderboard" means your single latest submission at deadline time, or your best submission across the challenge — the text above doesn't say explicitly.

@@ -3,7 +3,7 @@
 S1 entities are chosen by a hash of their normalised name (so all businesses sharing a name are kept together),
 together with their true S2/S3 matches and the unmatched S2/S3 rows of the same name buckets.
 
-    python src/make_sample.py --data ../../dataset/train --out ../../sample_dense --mod 20
+    python experiments/make_sample.py --data ../../dataset/train --out ../../sample_dense --mod 20
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))

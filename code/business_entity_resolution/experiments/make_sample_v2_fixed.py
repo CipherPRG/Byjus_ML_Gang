@@ -15,16 +15,16 @@ The key difference from make_sample.py:
 Usage
 -----
 # Quick test on the small sample/dataset/train folder:
-python src/make_sample_v2.py --data ../../sample/dataset/train --out ../../sample_v2_test --frac 0.2
+python experiments/make_sample_v2.py --data ../../sample/dataset/train --out ../../sample_v2_test --frac 0.2
 
 # Full run (needs ~16 GB RAM; let Pratham do this):
-python src/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2 --frac 0.05
+python experiments/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2 --frac 0.05
 
 # India only first (fits in 12 GB):
-python src/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2_india --frac 0.05 --country India
+python experiments/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2_india --frac 0.05 --country India
 
 Then train with:
-  python src/train.py --data ../../sample_v2 --models ../../models_v7 --workers 8 --addr-stop-frac 0.01
+  python experiments/train.py --data ../../sample_v2 --models ../../models_v7 --workers 8 --addr-stop-frac 0.01
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
@@ -33,7 +33,6 @@ import argparse
 import os
 import sys
 import zlib
-import pandas as pd
 from io_utils import read_tsv, countries_of
 from pipeline import build_country
 
@@ -248,7 +247,7 @@ def main():
     print(f"  {'TOTAL':20s}  {len(keep_s1_ids):>10}  {len(keep_oth_ids):>10}")
     print("=" * 60)
     print(f"\nDone. Output in: {a.out}")
-    print("Next step: python src/train.py --data ../../<out_dir> --models ../../models_v7 "
+    print("Next step: python experiments/train.py --data ../../<out_dir> --models ../../models_v7 "
           "--workers 8 --addr-stop-frac 0.01")
 
 

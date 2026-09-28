@@ -21,7 +21,7 @@ from norm import norm_name, norm_addr, skel, generic_addr_tokens            # no
 from blocking import Side, candidates, candidates_extra, keys_v3            # noqa: E402
 from features import pair_features, F1, F1_V3                               # noqa: E402
 from evaluate import f05_macro                                              # noqa: E402
-from model import decode, decode_ef_assigned, stage2_matrix, raw2           # noqa: E402
+from model import decode, decode_ef_assigned, stage2_matrix                 # noqa: E402
 from pipeline import build_country                                          # noqa: E402
 
 CFG = dict(max_block=60, max_s1_block=200, topk=60, addr_stop_frac=0.0, keys_v2=True)

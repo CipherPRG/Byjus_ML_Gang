@@ -6,7 +6,7 @@ and fits stage1 with the current production P1 config on the full training split
 split needed here - we just want relative importances, not a score).
 
 Usage:
-    python src/check_feature_importance.py --data ../../sample_dense --workers 5
+    python experiments/check_feature_importance.py --data ../../sample_dense --workers 5
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))

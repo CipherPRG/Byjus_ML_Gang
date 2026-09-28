@@ -7,14 +7,13 @@ its config into model.py's P1 dict yourself (per WORKPLAN.md B4.5: "do not swap 
 model without Track D's sign-off").
 
 Usage (same data/workers args as train.py):
-    python src/model_bench.py --data ../../sample_dense --workers 5
-    python src/model_bench.py --data ../../sample_dense --workers 5 --candidates logreg,rf200,current
+    python experiments/model_bench.py --data ../../sample_dense --workers 5
+    python experiments/model_bench.py --data ../../sample_dense --workers 5 --candidates logreg,rf200,current
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 import argparse, time, zlib
 import numpy as np
-import pandas as pd
 import lightgbm as lgb
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier

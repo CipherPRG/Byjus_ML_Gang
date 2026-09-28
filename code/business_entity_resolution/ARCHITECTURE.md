@@ -5,6 +5,11 @@ shape, what every source file does internally, and the relations/gotchas that ar
 obvious from reading one file at a time. Sections 1–7 describe the pipeline up to v8 (commit `58946ae`); **§8 lists everything
 added after that (v9–v11: rival-context training sample, EF decoder, feat_v3, speed-ups).**
 
+> **Note:** this file is the team's development log. Tools it mentions that are not in `src/` or
+> `experiments/` (`diag_blocking.py`, `rival_density.py`, `fit_decoder.py`, `blend_scores.py`, the
+> `sample_dense.zip` and `models_v3/v4` snapshots) were removed from `main` in the final clean-up and remain
+> in the git history (tag `archive-snapshot`).
+
 ## 1. Problem recap
 
 3 noisy business-record sources per country. Source 1 = clean reference entities.
@@ -146,7 +151,7 @@ so predict/eval reproduce them automatically).
 with a loss breakdown (blocking vs model FN, FP, singletons), thr/margin sweep,
 `--val-split` (score only train.py's val entities) and `--cache`.
 
-**`diag_blocking.py`** (repo root) — for every missed true pair says why (no shared key
+**`diag_blocking.py`** (development tool, in git history) — for every missed true pair says why (no shared key
 / capped / top-K cut), prints examples and a caps/top-K recall-vs-cost sweep;
 `--kv2` to test keys_v2.
 
@@ -268,7 +273,7 @@ competition.
   are cached (`functools.lru_cache`), ASCII text skips accent stripping. Verified bitwise identical
   (normalised strings, keys, candidates, IDF tables, 36- and 42-column features); ~30% faster
   blocking, ~25% faster features single-process.
-- **`blend_scores.py`** (repo root): averages the saved stage-2 scores of two models; the weight and
+- **`blend_scores.py`** (development tool, in git history): averages the saved stage-2 scores of two models; the weight and
   thr/margin are chosen on the ES half, and the blend is used only if it beats both models alone there.
 - **`eval_full.py --val-split`** scores a model on exactly train.py's validation entities of any
   data folder, so models trained on the same sample compare fairly.

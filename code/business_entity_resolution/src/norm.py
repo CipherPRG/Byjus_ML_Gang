@@ -82,9 +82,7 @@ def translit(s: str) -> str:
             out.append(str(unicodedata.digit(ch, ""))); last_cons = False
         else:
             out.append(" " if "DANDA" in rest else ""); last_cons = False
-    res = "".join(out)
-    # word-final inherent 'a' after a consonant is usually silent
-    return re.sub(r"(?<=[^aeiou\s])a(?=\s|$)", "", res) if False else res
+    return "".join(out)
 
 
 LEGAL_SK = {"prvt", "lmtd", "lmt", "pr", "l", "prl", "ltd", "llp", "kmpn", "kp", "prvtl", "lmtdd"}

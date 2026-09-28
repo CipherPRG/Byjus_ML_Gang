@@ -10,7 +10,7 @@ gain-based feature importance, so a_exact's stage2 contribution can be judged on
 own rather than assumed from its (irrelevant) stage1 importance.
 
 Usage:
-    python src/check_stage2_importance.py --data ../../sample_dense --workers 5
+    python experiments/check_stage2_importance.py --data ../../sample_dense --workers 5
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))

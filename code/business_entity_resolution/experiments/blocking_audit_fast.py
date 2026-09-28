@@ -29,7 +29,6 @@ import argparse
 import os
 from collections import Counter, defaultdict
 
-import numpy as np
 import pandas as pd
 
 from blocking import Side, candidates, keys_for, WEIGHT

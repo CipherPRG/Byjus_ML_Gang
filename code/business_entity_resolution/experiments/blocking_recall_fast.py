@@ -12,7 +12,7 @@ Does NOT reproduce the original script's failure-mode A/B/C/D/E breakdown - if y
 that level of detail, it's worth writing directly rather than debugging the slow version.
 
 Usage:
-    python src/blocking_recall_fast.py --data ../../../sample_dense --workers 5
+    python experiments/blocking_recall_fast.py --data ../../../sample_dense --workers 5
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))

@@ -5,8 +5,7 @@ import os as _os, sys as _sys  # experiments/ scripts import the pipeline module
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
 
 import pandas as pd
-import numpy as np
-from blocking import Side, candidates, h64, keys_for, WEIGHT
+from blocking import Side, candidates, keys_for, WEIGHT
 from norm import norm_name, norm_addr
 from io_utils import read_tsv, read_country
 import os

@@ -61,27 +61,6 @@ def _jac(a, b):
     return len(a & b) / len(a | b)
 
 
-
-
-def _hnum(t1, t2):
-    """S1 house number vs the CLOSEST number token anywhere in the other address.
-    Separates a typo'd house number (1400 -> 1402, 407 -> 07: edit distance 1) from a genuinely
-    different building (46 -> 53: edit distance 2+). On sample data, among candidates with
-    near-identical names, ~87% (US) / ~61% (India) of wrong pairs are edit 2+, vs ~5% of true pairs.
-    Returns (edit distance capped at 3, log1p numeric gap); (-1, -1) if either side has no number."""
-    n1 = [t for t in t1 if _hasdig(t)]
-    n2 = [t for t in t2 if _hasdig(t)]
-    if not n1 or not n2:
-        return -1.0, -1.0
-    h = n1[0]
-    best = min(n2, key=lambda y: Levenshtein.distance(h, y))
-    e = min(Levenshtein.distance(h, best), 3)
-    a = "".join(ch for ch in h if ch.isdigit())[:9]
-    b = "".join(ch for ch in best if ch.isdigit())[:9]
-    gap = float(np.log1p(abs(int(a) - int(b)))) if a and b else -1.0
-    return float(e), gap
-
-
 @lru_cache(maxsize=1 << 16)
 def _pname(n):
     """Per-record name parts (pure function of the string; cached because every record appears in
@@ -99,7 +78,11 @@ def _paddr(a, stop):
 
 
 def _hnum_d(n1, n2):
-    """_hnum() on precomputed number-token lists (same result, no re-scan of the tokens)."""
+    """S1 house number (from precomputed number tokens) vs the CLOSEST number token anywhere in the other address.
+    Separates a typo'd house number (1400 -> 1402, 407 -> 07: edit distance 1) from a genuinely
+    different building (46 -> 53: edit distance 2+). On sample data, among candidates with
+    near-identical names, ~87% (US) / ~61% (India) of wrong pairs are edit 2+, vs ~5% of true pairs.
+    Returns (edit distance capped at 3, log1p numeric gap); (-1, -1) if either side has no number."""
     if not n1 or not n2:
         return -1.0, -1.0
     h = n1[0]

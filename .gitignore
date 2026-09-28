@@ -3,3 +3,13 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Local data, models and run outputs (never committed)
+dataset/
+output*/
+models*/
+sample*/
+eval_cache*/
+*.log
+catboost_info/
+.DS_Store

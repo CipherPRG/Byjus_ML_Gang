@@ -15,7 +15,7 @@ Does NOT touch blocking.py/pipeline.py (Track A's files) - source tags are recon
 calling Side/candidates directly, mirroring what build_country already does internally.
 
 Usage:
-    python src/cross_source_experiment.py --data ../../sample_dense --workers 5
+    python experiments/cross_source_experiment.py --data ../../sample_dense --workers 5
 """
 import os as _os, sys as _sys  # experiments/ scripts import the pipeline modules from ../src
 _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "src"))
