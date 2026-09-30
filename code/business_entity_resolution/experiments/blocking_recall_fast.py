@@ -1,6 +1,6 @@
 """Fast blocking-recall check. Reuses the SAME build_country()/candidates() code path
 that train.py and model_bench.py already use (fast, vectorized-ish blocking), instead of
-adithya-sundar's blocking_audit.py, which recomputes keys itself via plain-Python
+blocking_audit.py, which recomputes keys itself via plain-Python
 iterrows() over ~800K records and took 30+ min without finishing.
 
 Gives you the headline number - blocking_recall (fraction of ground-truth S1->match

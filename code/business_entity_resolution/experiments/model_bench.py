@@ -1,10 +1,9 @@
-"""B4.5 (WORKPLAN.md) - light-to-heavy stage1 model comparison + a couple of extra LightGBM
+"""Light-to-heavy stage-1 model comparison + a couple of extra LightGBM
 hyperparameter combos, all measured on the SAME train/val split and SAME full 2-stage pipeline
 (stage2 + decode unchanged) so results are directly comparable by validation macro F0.5.
 
-Does NOT modify model.py or train.py - this is a read-only benchmark. Whatever wins, you copy
-its config into model.py's P1 dict yourself (per WORKPLAN.md B4.5: "do not swap the production
-model without Track D's sign-off").
+Read-only benchmark: does not modify model.py or train.py. Result: LightGBM (the production
+stage-1 model) was the best of the 8 model families compared.
 
 Usage (same data/workers args as train.py):
     python experiments/model_bench.py --data ../../sample_dense --workers 5

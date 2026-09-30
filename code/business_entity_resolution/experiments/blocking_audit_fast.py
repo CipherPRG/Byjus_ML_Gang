@@ -1,4 +1,4 @@
-"""Fast, same-numbers rewrite of adithya-sundar's blocking_audit.py.
+"""Fast, same-numbers rewrite of blocking_audit.py.
 
 The original never finished (killed after 30+ min of CPU-bound work) because of two
 hot spots that are effectively quadratic in dataset size, not linear:

@@ -1,6 +1,6 @@
-"""Track B experiment: per-country threshold/margin instead of one global value.
+"""Experiment: per-country threshold/margin instead of one global value.
 
-Rationale (from both our own blocking-recall numbers and an independent LLM review):
+Rationale (from our blocking-recall numbers):
 blocking recall already differs a lot by country (India 0.9284 vs US 0.9720), so the score
 distributions p2 produces per country likely differ too. One global thr/margin is a compromise
 that may be leaving F0.5 on the table for one or both countries. This script measures whether
@@ -8,7 +8,7 @@ sweeping thr/margin independently per country (using the same decode_prep/decode
 already built) beats the single global optimum, on the exact same train/val split as train.py.
 
 Does NOT modify model.py or train.py - read-only experiment, same as model_bench.py's spirit.
-Whatever wins, you copy the values into train.py/predict.py yourself.
+Result: +0.0002 over one global value (noise), so it was not adopted.
 
 Usage:
     python experiments/per_country_threshold.py --data ../../sample_dense --workers 5

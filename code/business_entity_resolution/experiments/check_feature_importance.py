@@ -1,4 +1,4 @@
-"""B2/Track-B checklist item: check LightGBM stage1 feature importance, flag features
+"""Check LightGBM stage-1 feature importance, flag features
 that contribute ~nothing so they can be considered for removal.
 
 Reuses the exact same data-build as train.py/model_bench.py (build_country + pair_features)

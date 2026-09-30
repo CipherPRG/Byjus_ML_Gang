@@ -1,4 +1,4 @@
-"""Track B experiment: does cross-source corroboration help stage2?
+"""Experiment: does cross-source corroboration help stage 2?
 
 Idea: right now every candidate pair (r1, ro) is scored using only its own features plus
 competition context (rank/gap among OTHER candidates for the same r1 or ro). It never asks
@@ -11,7 +11,7 @@ least one candidate for this r1 with stage1 p1 >= a threshold. Computed from a p
 so it's the same value for every candidate belonging to that r1 (entity-level evidence, not
 pair-level) - this is what's genuinely new information stage2 doesn't currently have.
 
-Does NOT touch blocking.py/pipeline.py (Track A's files) - source tags are reconstructed here by
+Read-only: does not modify blocking.py/pipeline.py - source tags are reconstructed here by
 calling Side/candidates directly, mirroring what build_country already does internally.
 
 Usage:

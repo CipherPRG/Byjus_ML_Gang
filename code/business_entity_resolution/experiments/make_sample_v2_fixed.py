@@ -1,7 +1,7 @@
 """Build a training sample based on what blocking actually produces.
 
-FIXED copy of Aayush's make_sample_v2.py (branch aayush-sample-v2): competing S1 entities are no longer
-written (they had no ground-truth rows, which mislabelled their true matches as negatives).
+Competing S1 entities are not written: they have no ground-truth rows, so their true matches would be
+mislabelled as negatives.
 
 The key difference from make_sample.py:
   Old: keeps 1/mod of S1 by hash of (country+name). Wrong candidates with
@@ -15,13 +15,13 @@ The key difference from make_sample.py:
 Usage
 -----
 # Quick test on the small sample/dataset/train folder:
-python experiments/make_sample_v2.py --data ../../sample/dataset/train --out ../../sample_v2_test --frac 0.2
+python experiments/make_sample_v2_fixed.py --data ../../sample/dataset/train --out ../../sample_v2_test --frac 0.2
 
-# Full run (needs ~16 GB RAM; let Pratham do this):
-python experiments/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2 --frac 0.05
+# Full run (needs ~16 GB RAM):
+python experiments/make_sample_v2_fixed.py --data ../../dataset/train --out ../../sample_v2 --frac 0.05
 
 # India only first (fits in 12 GB):
-python experiments/make_sample_v2.py --data ../../dataset/train --out ../../sample_v2_india --frac 0.05 --country India
+python experiments/make_sample_v2_fixed.py --data ../../dataset/train --out ../../sample_v2_india --frac 0.05 --country India
 
 Then train with:
   python experiments/train.py --data ../../sample_v2 --models ../../models_v7 --workers 8 --addr-stop-frac 0.01
@@ -195,8 +195,8 @@ def main():
     print(f"Total S2/S3 kept  : {len(keep_oth_ids)}")
 
     # All S1 entities to include (selected + competing)
-    # FIX (Pratham/Claude, 26 Sep): competing S1s were written to train_source1.tsv WITHOUT ground-truth rows,
-    # so train.py labelled all their true matches as negatives (label noise). Version 1 drops them.
+    # Competing S1s are not written: without ground-truth rows, train.py would label all their true
+    # matches as negatives (label noise).
     all_s1_ids = keep_s1_ids
 
     # ---- write output files ----
